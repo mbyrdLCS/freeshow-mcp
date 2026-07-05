@@ -7,9 +7,12 @@ export async function callAction(
   host = DEFAULT_HOST,
   port = DEFAULT_PORT
 ): Promise<unknown> {
-  const params = new URLSearchParams({ action, data: JSON.stringify(data) });
-  const url = `http://${host}:${port}?${params}`;
-  const res = await fetch(url);
+  const url = `http://${host}:${port}/`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...data }),
+  });
   if (!res.ok) throw new Error(`FreeShow HTTP ${res.status}: ${await res.text()}`);
   const text = await res.text();
   try {
