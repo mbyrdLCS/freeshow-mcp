@@ -41,9 +41,17 @@ npx freeshow-mcp
 
 ### 3. Configure your MCP client
 
-#### Claude Code (CLI / desktop)
+> **Note:** Claude Code and the Claude Desktop app are configured **differently**. Claude Code does *not* read MCP servers from `settings.json` — use the `claude mcp add` command (or a project `.mcp.json`). Claude Desktop uses its own `claude_desktop_config.json` file.
 
-Add to `~/.claude/settings.json`:
+#### Claude Code (CLI)
+
+Run this one-liner (registers the server for your user account):
+
+```bash
+claude mcp add freeshow --env FREESHOW_HOST=localhost --env FREESHOW_PORT=5506 -- node /absolute/path/to/freeshow-mcp/dist/index.js
+```
+
+Or, to share the config with a team via the repo, create a `.mcp.json` in your project root:
 
 ```json
 {
@@ -59,6 +67,8 @@ Add to `~/.claude/settings.json`:
   }
 }
 ```
+
+Verify with `claude mcp list` — you should see `freeshow` listed and connected.
 
 #### Claude Desktop App
 
@@ -127,13 +137,26 @@ Both machines can also be the same computer.
 | `start_show` | Start a show by ID |
 | `get_shows` | List all available shows |
 | `get_show` | Get details of a specific show |
+| `get_show_layout` | Get the slide order of a show |
+| `change_layout` | Switch a show to a different layout |
+| `get_plain_text` | Read a show's content as plain text (with `[Group]` labels) |
+| `set_plain_text` | Rewrite a show's content from plain text |
+| `get_groups` | Get a show's slide groups (Verse, Chorus, …) |
+| `select_group_by_id` | Jump straight to a slide group (e.g. the chorus) |
+| `set_template` | Apply a template to the active show |
 | `get_output_slide_text` | Get text of the currently displayed slide |
+| `get_output_group_name` | Get the group name of the displayed slide |
 
 ### Projects
 
 | Tool | Description |
 |------|-------------|
 | `get_projects` | List all projects |
+| `get_project` | Get details of a specific project |
+| `create_project` | Create a new project (service plan) |
+| `add_to_project` | Add a show to a project |
+| `rename_project` | Rename a project |
+| `remove_project_item` | Remove an item from a project |
 | `select_project_by_name` | Open a project by name |
 | `next_project_item` | Move to next item in project |
 | `previous_project_item` | Move to previous item in project |
@@ -151,6 +174,7 @@ Both machines can also be the same computer.
 | `clear_overlay` | Clear a specific overlay by ID |
 | `lock_output` | Freeze/unfreeze the output |
 | `get_output` | Get current output state |
+| `get_cleared` | See which output layers are cleared |
 | `restore_output` | Restore last active slide |
 
 ### Audio
@@ -213,7 +237,9 @@ Both machines can also be the same computer.
 
 | Tool | Description |
 |------|-------------|
-| `create_show` | Create a new show from text |
+| `create_show` | Create a new show from text — blank line = new slide, `[Verse 1]` / `[Chorus]` labels create named slide groups |
+| `search_songs` | Search the web for a song by title/artist (same sources as FreeShow's built-in search) |
+| `import_song` | Search, fetch lyrics, and create a show in one step (ensure you're licensed, e.g. CCLI/PraiseCharts) |
 
 ---
 

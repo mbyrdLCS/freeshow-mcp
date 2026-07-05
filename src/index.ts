@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { callAction } from "./freeshow.js";
+import { searchSongs, fetchLyrics } from "./lyrics.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
@@ -76,6 +77,70 @@ server.tool(
   async () => action("get_output_slide_text")
 );
 
+server.tool(
+  "get_output_group_name",
+  "Get the group name (e.g. Verse, Chorus) of the currently displayed slide",
+  {},
+  async () => action("get_output_group_name")
+);
+
+server.tool(
+  "get_plain_text",
+  'Get a show\'s full content as plain text, with "[Group]" section labels and blank lines between slides. Ideal for reading or preparing an edit.',
+  { id: z.string().describe("Show ID") },
+  async ({ id }) => action("get_plain_text", { id })
+);
+
+server.tool(
+  "set_plain_text",
+  "Replace a show's entire content from plain text. Same format as get_plain_text / create_show: " +
+    'blank line between slides, optional "[Verse 1]", "[Chorus]" etc. labels to group slides. ' +
+    "Use get_plain_text first, modify, then set — this overwrites all existing slides.",
+  {
+    id: z.string().describe("Show ID"),
+    value: z.string().describe("New plain-text content for the whole show"),
+  },
+  async ({ id, value }) => action("set_plain_text", { id, value })
+);
+
+server.tool(
+  "get_groups",
+  "Get a show's slide groups (Verse, Chorus, etc.) with their content",
+  { id: z.string().describe("Show ID") },
+  async ({ id }) => action("get_groups", { id })
+);
+
+server.tool(
+  "select_group_by_id",
+  "Jump the presentation to a slide group by its group ID (e.g. straight to the chorus)",
+  { id: z.string().describe("Group ID (from get_groups)") },
+  async ({ id }) => action("id_select_group", { id })
+);
+
+server.tool(
+  "get_show_layout",
+  "Get the slide layout (order of slides) of a show",
+  { id: z.string().describe("Show ID") },
+  async ({ id }) => action("get_show_layout", { id })
+);
+
+server.tool(
+  "change_layout",
+  "Switch a show to a different layout",
+  {
+    showId: z.string().describe("Show ID"),
+    layoutId: z.string().describe("Layout ID"),
+  },
+  async ({ showId, layoutId }) => action("change_layout", { showId, layoutId })
+);
+
+server.tool(
+  "set_template",
+  "Apply a template (styling) to the active show",
+  { id: z.string().describe("Template ID") },
+  async ({ id }) => action("set_template", { id })
+);
+
 // ─── PROJECTS ─────────────────────────────────────────────────────────────────
 
 server.tool("get_projects", "Get list of all projects", {}, async () => action("get_projects"));
@@ -95,6 +160,50 @@ server.tool(
   "Select a project item by index",
   { index: z.number().describe("Zero-based item index") },
   async ({ index }) => action("index_select_project_item", { index })
+);
+
+server.tool(
+  "get_project",
+  "Get details of a specific project",
+  { id: z.string().describe("Project ID") },
+  async ({ id }) => action("get_project", { id })
+);
+
+server.tool(
+  "create_project",
+  "Create a new project (e.g. a service plan to hold shows in order)",
+  { name: z.string().describe("Project name") },
+  async ({ name }) => action("create_project", { name })
+);
+
+server.tool(
+  "add_to_project",
+  "Add a show to a project",
+  {
+    projectId: z.string().describe("Project ID"),
+    id: z.string().describe("Show ID to add"),
+  },
+  async ({ projectId, id }) => action("add_to_project", { projectId, id })
+);
+
+server.tool(
+  "rename_project",
+  "Rename a project",
+  {
+    id: z.string().describe("Project ID"),
+    name: z.string().describe("New project name"),
+  },
+  async ({ id, name }) => action("rename_project", { id, name })
+);
+
+server.tool(
+  "remove_project_item",
+  "Remove an item from a project by index",
+  {
+    id: z.string().describe("Project ID"),
+    index: z.number().describe("Zero-based index of the item to remove"),
+  },
+  async ({ id, index }) => action("remove_project_item", { id, index })
 );
 
 // ─── CLEAR / OUTPUT ───────────────────────────────────────────────────────────
@@ -120,6 +229,13 @@ server.tool(
   "Get current output state",
   { id: z.string().optional().describe("Output ID (omit for default)") },
   async ({ id }) => action("get_output", { id })
+);
+
+server.tool(
+  "get_cleared",
+  "Get which output layers (slide, background, audio, overlays) are currently cleared",
+  {},
+  async () => action("get_cleared")
 );
 
 // ─── AUDIO ────────────────────────────────────────────────────────────────────
@@ -299,13 +415,50 @@ server.tool(
 
 server.tool(
   "create_show",
-  "Create a new show from text",
+  "Create a new show from text. Separate slides with a BLANK LINE (double newline). " +
+    'Optionally start a slide with a section label in brackets — e.g. "[Verse 1]", "[Chorus]", ' +
+    '"[Bridge]" — to create named, color-coded slide groups (great for songs).',
   {
-    text: z.string().describe("Slide text content (use newlines for multiple slides)"),
+    text: z
+      .string()
+      .describe(
+        'Slide text. Blank line between slides. Optional "[Section]" label as the first line of a slide, e.g. "[Verse 1]\\nAmazing grace...\\n\\n[Chorus]\\nMy chains are gone..."'
+      ),
     name: z.string().optional().describe("Show name"),
-    category: z.string().optional().describe("Category name"),
+    category: z.string().optional().describe('Category name, e.g. "song" or "presentation"'),
   },
   async ({ text, name, category }) => action("create_show", { text, name, category })
+);
+
+// ─── SONG SEARCH ──────────────────────────────────────────────────────────────
+
+server.tool(
+  "search_songs",
+  "Search the web for a song by title/artist (same lyric sources FreeShow's built-in search uses). " +
+    "Returns matching songs. Use import_song to create a show from a result. " +
+    "Ensure your church holds the appropriate license (e.g. CCLI, PraiseCharts) for songs you import.",
+  { query: z.string().describe('Song title and artist, e.g. "Goodness of God Bethel Music"') },
+  async ({ query }) => ok(await searchSongs(query))
+);
+
+server.tool(
+  "import_song",
+  "Search for a song, fetch its lyrics, and create a FreeShow show from them in one step. " +
+    "Uses the top search match. Slides are split on blank lines; [Verse]/[Chorus] markers become groups when present.",
+  {
+    query: z.string().describe('Song title and artist, e.g. "Living Hope Phil Wickham"'),
+    name: z.string().optional().describe("Show name (defaults to the song title)"),
+    category: z.string().optional().describe('Category name (defaults to "song")'),
+  },
+  async ({ query, name, category }) => {
+    const song = await fetchLyrics(query);
+    await callAction("create_show", {
+      name: name ?? song.title,
+      category: category ?? "song",
+      text: song.lyrics,
+    });
+    return ok({ created: name ?? song.title, matched: `${song.title} — ${song.artist}` });
+  }
 );
 
 // ─── RESTORE ──────────────────────────────────────────────────────────────────
