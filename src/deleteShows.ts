@@ -79,6 +79,20 @@ function removeFromIndex(file: string, ids: Set<string>) {
   fs.writeFileSync(file, JSON.stringify(index), "utf8");
 }
 
+// Drop the shows from every project so no project points at a missing show
+function removeFromProjects(file: string, ids: Set<string>): number {
+  if (!fs.existsSync(file)) return 0;
+  const data = JSON.parse(fs.readFileSync(file, "utf8"));
+  let removed = 0;
+  for (const project of Object.values<any>(data.projects ?? {})) {
+    const before = project.shows?.length ?? 0;
+    project.shows = (project.shows ?? []).filter((item: { id: string }) => !ids.has(item.id));
+    removed += before - project.shows.length;
+  }
+  fs.writeFileSync(file, JSON.stringify(data), "utf8");
+  return removed;
+}
+
 export async function deleteShows(ids: string[]) {
   const host = process.env.FREESHOW_HOST ?? "localhost";
   if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
@@ -116,12 +130,18 @@ export async function deleteShows(ids: string[]) {
   }
   removeFromIndex(path.join(appDataDir(), "shows.json"), targets);
   removeFromIndex(path.join(root, "Config", "shows.json"), targets);
+  // FreeShow keeps projects in two files; count the larger cleanup (they normally match)
+  const projectItemsRemoved = Math.max(
+    removeFromProjects(path.join(appDataDir(), "projects.json"), targets),
+    removeFromProjects(path.join(root, "Config", "projects.json"), targets)
+  );
 
   launchFreeShow();
   const back = await waitFor(apiUp, 60000);
 
   return {
     deleted: moved.map((f) => f.replace(/\.show$/, "")),
+    ...(projectItemsRemoved && { projectItemsRemoved }),
     recoverableFrom: moved.length ? trash : undefined,
     freeShowRestarted: back,
     ...(!back && { warning: "FreeShow didn't come back within a minute — open it manually (set FREESHOW_APP_PATH if it's installed somewhere unusual)." }),

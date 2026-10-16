@@ -681,7 +681,8 @@ async function reapplyTheme(showId: string, remembered: RememberedTheme) {
 
 server.tool(
   "create_show",
-  "Create a new show from text and return its ID. Separate slides with a BLANK LINE (double newline). " +
+  "Create a new show from text and return its ID. FreeShow also adds it to the currently open project. " +
+    "Separate slides with a BLANK LINE (double newline). " +
     'Optionally start a slide with a section label in brackets — e.g. "[Verse 1]", "[Chorus]", ' +
     '"[Bridge]" — to create named, color-coded slide groups (great for songs). ' +
     "Pass theme (and optionally style) to brand it in one step.",

@@ -7,6 +7,8 @@
 
 ### Fixed
 - `import_song` / `search_songs` lyrics no longer start with the lyrics site's "7 ContributorsSong Title Lyrics" header.
+- `delete_shows` also removes the deleted shows from any project that contains them.
+- `create_show` notes that FreeShow adds new shows to the currently open project.
 - Re-applying a split style after FreeShow rewrites a slide's text keeps the heading/body pair linked, so switching styles later merges them back correctly.
 
 ## 0.3.0 — 2026-10-16
