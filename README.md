@@ -282,8 +282,9 @@ Both machines can also be the same computer.
 | `save_theme` | Create or update a theme |
 | `apply_theme` | Restyle a show (or just some slides) with a theme style |
 | `preview_slide` | Render a slide as an image |
-| `add_image` | Place an image (QR code, photo, logo) on a slide — survives text edits and theme changes |
-| `remove_image` | Remove an image added with `add_image` |
+| `add_qr_code` | Put a QR code on a slide using FreeShow's built-in QR Code element (no image file needed) |
+| `add_image` | Place an image (photo, logo) on a slide — survives text edits and theme changes |
+| `remove_image` | Remove an image or QR code added with the tools above |
 
 ---
 
@@ -323,6 +324,7 @@ Once configured, you can talk to Claude naturally:
 ```
 "Import 'Living Hope' by Phil Wickham with our church theme"
 "Make an announcements slideshow that loops every 8 seconds"
+"Add a QR code to slide 4 that opens our prayer partner form"
 "Show me a preview of slide 2"
 "Next slide"
 "Go back to the previous slide"

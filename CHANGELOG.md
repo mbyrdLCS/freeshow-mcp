@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0 — 2026-10-16
+
+### Added
+- `add_qr_code` — places FreeShow's built-in **QR Code** slide element (generated live by FreeShow, no image file), with color/background options. It checks that the site responds first, and the code is remembered by slide position like `add_image`, so it survives text edits and theme changes. `remove_image` removes QR codes too.
+
 ## 0.5.0 — 2026-10-16
 
 ### Added

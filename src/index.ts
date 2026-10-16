@@ -11,7 +11,7 @@ import { ThemeSchema, applyStyleToShow, listThemes, loadTheme, resolveStyle, sav
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.5.0",
+  version: "0.6.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -641,8 +641,14 @@ function labelSlides(text: string): string {
     .join("\n\n");
 }
 
-// Images added with add_image, remembered by layout position so they survive text rewrites
-type RememberedImage = { name: string; src: string; box: { top: number; left: number; width: number; height: number }; fit: string };
+// Images (add_image) and QR codes (add_qr_code), remembered by layout position so they survive text rewrites
+type RememberedImage = {
+  name: string;
+  box: { top: number; left: number; width: number; height: number };
+  src?: string;
+  fit?: string;
+  qr?: { text: string; color: string; background: string }; // FreeShow's built-in QR Code element
+};
 const IMAGE_ID_PREFIX = "mcp-image-";
 
 function placeImages(show: Record<string, any>) {
@@ -656,13 +662,10 @@ function placeImages(show: Record<string, any>) {
     if (!slide) continue;
     for (const img of list) {
       const { top, left, width, height } = img.box;
-      slide.items.push({
-        id: IMAGE_ID_PREFIX + img.name,
-        type: "media",
-        src: img.src,
-        fit: img.fit,
-        style: `top:${top}px;left:${left}px;width:${width}px;height:${height}px;`,
-      });
+      const style = `top:${top}px;left:${left}px;width:${width}px;height:${height}px;`;
+      const id = IMAGE_ID_PREFIX + img.name;
+      if (img.qr) slide.items.push({ id, type: "qr_code", qr_code: img.qr, style });
+      else slide.items.push({ id, type: "media", src: img.src, fit: img.fit, style });
     }
   }
 }
@@ -792,46 +795,90 @@ server.tool(
   }
 );
 
+async function rememberSlideExtra(showId: string, slide: number, extra: RememberedImage) {
+  const show = await getShowData(showId);
+  const count = show.layouts?.[show.settings?.activeLayout]?.slides?.length ?? 0;
+  if (slide > count) throw new Error(`Slide ${slide} doesn't exist (the layout has ${count} slides)`);
+  const images = { ...(show.settings?.mcpImages ?? {}) } as Record<string, RememberedImage[]>;
+  images[slide] = [...(images[slide] ?? []).filter((img) => img.name !== extra.name), extra];
+  show.settings = { ...show.settings, mcpImages: images };
+  placeImages(show);
+  await callAction("set_show", { id: showId, value: JSON.stringify(show) });
+}
+
+const slugName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+const boxParams = {
+  top: z.number().describe("Top edge, px"),
+  left: z.number().describe("Left edge, px"),
+  width: z.number().describe("Width, px"),
+  height: z.number().describe("Height, px"),
+};
+
 server.tool(
   "add_image",
-  "Place an image (QR code, photo, logo) on a slide of a show. Positions are in px on a 1920x1080 slide. " +
-    "Re-using a name replaces that image. The image is remembered, so it stays put through text edits and theme changes.",
+  "Place an image (photo, logo) on a slide of a show. Positions are in px on a 1920x1080 slide. " +
+    "Re-using a name replaces that image. The image is remembered, so it stays put through text edits and theme changes. " +
+    "For QR codes use add_qr_code (FreeShow's built-in QR element).",
   {
     showId: z.string().describe("Show ID"),
     slide: z.number().int().min(1).describe("Slide number in the layout, starting at 1"),
     path: z.string().describe("Absolute path to the image file"),
-    name: z.string().optional().describe('Name for this image, e.g. "qr" (defaults to the file name)'),
-    top: z.number().describe("Top edge, px"),
-    left: z.number().describe("Left edge, px"),
-    width: z.number().describe("Width, px"),
-    height: z.number().describe("Height, px"),
+    name: z.string().optional().describe('Name for this image, e.g. "logo" (defaults to the file name)'),
+    ...boxParams,
     fit: z.enum(["contain", "cover", "fill"]).optional().describe('How the image fills its box (default "contain")'),
   },
   async ({ showId, slide, path: src, name, top, left, width, height, fit }) => {
     if (!fs.existsSync(src)) return ok({ error: `File not found: ${src}` });
-    const show = await getShowData(showId);
-    const count = show.layouts?.[show.settings?.activeLayout]?.slides?.length ?? 0;
-    if (slide > count) return ok({ error: `Slide ${slide} doesn't exist (the layout has ${count} slides)` });
-    const imageName = (name ?? path.basename(src, path.extname(src))).toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const images = { ...(show.settings?.mcpImages ?? {}) } as Record<string, RememberedImage[]>;
-    images[slide] = [
-      ...(images[slide] ?? []).filter((img) => img.name !== imageName),
-      { name: imageName, src, box: { top, left, width, height }, fit: fit ?? "contain" },
-    ];
-    show.settings = { ...show.settings, mcpImages: images };
-    placeImages(show);
-    await callAction("set_show", { id: showId, value: JSON.stringify(show) });
+    const imageName = slugName(name ?? path.basename(src, path.extname(src)));
+    await rememberSlideExtra(showId, slide, { name: imageName, src, fit: fit ?? "contain", box: { top, left, width, height } });
     return ok({ showId, slide, image: imageName });
   }
 );
 
 server.tool(
+  "add_qr_code",
+  "Put a QR code on a slide using FreeShow's built-in QR Code element (generated live by FreeShow, no image file). " +
+    "For web links it checks the site responds (an error page blocks it; many sites answer even for wrong paths, so still scan it with a phone). " +
+    "Positions are in px on a 1920x1080 slide; keep width = height. " +
+    "Re-using a name replaces that code; it stays put through text edits and theme changes.",
+  {
+    showId: z.string().describe("Show ID"),
+    slide: z.number().int().min(1).describe("Slide number in the layout, starting at 1"),
+    text: z.string().describe("What the code opens — usually a URL like https://example.org/forms/abc"),
+    name: z.string().optional().describe('Name for this code (default "qr")'),
+    ...boxParams,
+    color: z.string().optional().describe("Code color (default #000000 — dark on light scans best)"),
+    background: z.string().optional().describe('Background color (default #FFFFFF; "" for transparent)'),
+  },
+  async ({ showId, slide, text, name, top, left, width, height, color, background }) => {
+    let linkCheck: string | undefined;
+    if (/^https?:\/\//i.test(text)) {
+      try {
+        const res = await fetch(text, { redirect: "follow", signal: AbortSignal.timeout(10000) });
+        if (!res.ok) return ok({ error: `The link returned HTTP ${res.status} — check it before putting it on screen: ${text}` });
+        linkCheck = `site responded (HTTP ${res.status}) — scan it with a phone to confirm it opens the right page`;
+      } catch (err) {
+        linkCheck = `could not be checked (${(err as Error).message}) — scan it with a phone to confirm`;
+      }
+    }
+    const qrName = slugName(name ?? "qr");
+    await rememberSlideExtra(showId, slide, {
+      name: qrName,
+      qr: { text, color: color ?? "#000000", background: background ?? "#FFFFFF" },
+      box: { top, left, width, height },
+    });
+    return ok({ showId, slide, qrCode: qrName, text, ...(linkCheck && { link: linkCheck }) });
+  }
+);
+
+server.tool(
   "remove_image",
-  "Remove an image added with add_image",
+  "Remove an image or QR code added with add_image / add_qr_code",
   {
     showId: z.string().describe("Show ID"),
     slide: z.number().int().min(1).describe("Slide number, starting at 1"),
-    name: z.string().describe("Image name (as returned by add_image)"),
+    name: z.string().describe("Name (as returned by add_image / add_qr_code)"),
   },
   async ({ showId, slide, name }) => {
     const show = await getShowData(showId);
