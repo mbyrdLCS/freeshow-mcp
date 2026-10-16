@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 — 2026-10-16
+
+### Fixed
+- Themes were wiped after FreeShow restarted: FreeShow re-applies a show's template (usually "Default") to its slides when it loads the show. Applying a theme now clears the show and slide template, the same way FreeShow's own "remove template" does. Re-run `apply_theme` on shows themed with an earlier version.
+
 ## 0.4.0 — 2026-10-16
 
 ### Added

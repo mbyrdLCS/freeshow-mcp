@@ -9,7 +9,7 @@ import { ThemeSchema, applyStyleToShow, listThemes, loadTheme, resolveStyle, sav
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.4.0",
+  version: "0.4.1",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────

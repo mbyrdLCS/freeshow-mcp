@@ -247,6 +247,9 @@ function mergeSplitItems(slide: AnyObj) {
  */
 export function applyStyleToShow(show: AnyObj, style: ThemeStyle, folder: string, slideIds?: Set<string>) {
   const whole = !slideIds;
+  // FreeShow re-applies a show's template to its slides whenever it loads the show (e.g. after a
+  // restart), which would wipe the theme. Clear it, as FreeShow's own "remove template" does.
+  show.settings = { ...show.settings, template: null };
   // Remove media added by an earlier whole-show theme application
   show.media ??= {};
   if (whole) for (const key of Object.keys(show.media)) if (key.startsWith(THEME_ID_PREFIX)) delete show.media[key];
@@ -295,6 +298,7 @@ export function applyStyleToShow(show: AnyObj, style: ThemeStyle, folder: string
     }
 
     slide.settings ??= {};
+    delete slide.settings.template; // a slide template would override the theme
     if (style.background?.color) slide.settings.color = style.background.color;
     else delete slide.settings.color;
   }
