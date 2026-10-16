@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2 — 2026-10-16
+
+### Fixed
+- `set_plain_text` on a themed show could pour all the text into the first box: FreeShow applies the text a moment after the API call returns, and the theme was re-applied before that. It now waits for the edit to land and settle.
+- `create_show` on non-song shows without `[Label]` lines names each slide after its first line. FreeShow otherwise guesses song parts, so an announcements loop showed "Verse", "Chorus", "Bridge".
+
 ## 0.4.1 — 2026-10-16
 
 ### Fixed

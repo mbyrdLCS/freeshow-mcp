@@ -9,7 +9,7 @@ import { ThemeSchema, applyStyleToShow, listThemes, loadTheme, resolveStyle, sav
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.4.1",
+  version: "0.4.2",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -111,10 +111,22 @@ server.tool(
     value: z.string().describe("New plain-text content for the whole show"),
   },
   async ({ id, value }) => {
-    const remembered = (await getShowData(id)).settings?.mcpTheme as RememberedTheme | undefined;
+    const before = await getShowData(id);
+    const remembered = before.settings?.mcpTheme as RememberedTheme | undefined;
     await callAction("set_plain_text", { id, value });
     if (!remembered?.theme) return ok({ success: true });
-    await sleep(300);
+    // FreeShow applies the text a moment after the call returns. Re-styling before it lands lets
+    // FreeShow's write pour all the text into the first box, so wait until the show stops changing.
+    const original = JSON.stringify(before.slides);
+    let last = original;
+    let changed = false;
+    for (let stable = 0, i = 0; i < 40 && !(changed && stable >= 2); i++) {
+      await sleep(150);
+      const now = JSON.stringify((await getShowData(id)).slides);
+      if (now !== original) changed = true;
+      stable = now === last ? stable + 1 : 0;
+      last = now;
+    }
     return ok({ success: true, themed: await reapplyTheme(id, remembered) });
   }
 );
@@ -608,6 +620,20 @@ async function getShowData(id: string): Promise<Record<string, any>> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Without "[Label]" lines FreeShow guesses song parts (Verse, Chorus, Bridge...) for every slide.
+// For non-song shows, name each slide after its first line instead.
+function labelSlides(text: string): string {
+  const slides = text.split(/\n\s*\n/);
+  if (slides.some((slide) => /^\s*\[[^\]]+\]\s*$/m.test(slide))) return text;
+  return slides
+    .map((slide) => {
+      const first = slide.trim().split("\n")[0].trim();
+      const label = first.length > 30 ? first.slice(0, 30).trimEnd() + "…" : first;
+      return label ? `[${label.replace(/[[\]]/g, "")}]\n${slide.trim()}` : slide;
+    })
+    .join("\n\n");
+}
+
 // FreeShow's create_show doesn't return the new ID, so find it by diffing the show list.
 async function createShowAndGetId(data: { text: string; name?: string; category?: string }): Promise<string | undefined> {
   const before = new Set(Object.keys(await getShowList()));
@@ -683,6 +709,7 @@ server.tool(
   "create_show",
   "Create a new show from text and return its ID. FreeShow also adds it to the currently open project. " +
     "Separate slides with a BLANK LINE (double newline). " +
+    'For non-song shows without labels, each slide is named after its first line (FreeShow would otherwise guess "Verse", "Chorus"…). ' +
     'Optionally start a slide with a section label in brackets — e.g. "[Verse 1]", "[Chorus]", ' +
     '"[Bridge]" — to create named, color-coded slide groups (great for songs). ' +
     "Pass theme (and optionally style) to brand it in one step.",
@@ -697,7 +724,8 @@ server.tool(
     ...themeParams,
   },
   async ({ text, name, category, theme, style }) => {
-    const id = await createShowAndGetId({ text, name, category });
+    const isSong = (category ?? "").toLowerCase() === "song";
+    const id = await createShowAndGetId({ text: isSong ? text : labelSlides(text), name, category });
     if (!id) return ok({ created: name, warning: "Show was sent to FreeShow but its ID could not be confirmed" });
     const themed = theme ? await applyTheme(id, theme, style) : undefined;
     return ok({ created: name, id, ...(themed && { themed }) });
