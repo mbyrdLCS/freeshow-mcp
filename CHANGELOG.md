@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 — 2026-10-16
+
+### Added
+- `add_image` / `remove_image` — put a QR code, photo or logo on a specific slide. Images are remembered by slide position and re-placed after `set_plain_text` and theme changes (FreeShow would otherwise duplicate or drop them).
+- `preview_slide` warns when a timed slideshow is playing, because FreeShow's capture uses the live output and can show the wrong slide.
+
 ## 0.4.2 — 2026-10-16
 
 ### Fixed

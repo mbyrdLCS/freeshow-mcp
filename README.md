@@ -282,6 +282,8 @@ Both machines can also be the same computer.
 | `save_theme` | Create or update a theme |
 | `apply_theme` | Restyle a show (or just some slides) with a theme style |
 | `preview_slide` | Render a slide as an image |
+| `add_image` | Place an image (QR code, photo, logo) on a slide — survives text edits and theme changes |
+| `remove_image` | Remove an image added with `add_image` |
 
 ---
 
@@ -352,7 +354,7 @@ Once configured, you can talk to Claude naturally:
 - **Save in FreeShow.** Changes made through the API live in FreeShow's memory until it saves. If autosave is off, press Cmd/Ctrl+S.
 - **Deleting shows** isn't part of FreeShow's API, so `delete_shows` asks FreeShow to save and close, removes the shows, and reopens it (~10 seconds). It refuses while a slide is on screen and only works when FreeShow runs on the same computer. Deleted files go to `MCP Deleted Shows/` in FreeShow's data folder, so they can be recovered.
 - **Numbers start at 1.** Slide and project-item numbers in tools are 1-based, matching FreeShow's API.
-- **Previews** render the slide (including theme backgrounds) but not media playing on the background layer. If a preview comes back blank, show something on the output once.
+- **Previews** are built from the live output, so while a timed slideshow is playing they can show the wrong slide (the tool warns you). They render the slide (including theme backgrounds) but not media playing on the background layer. If a preview comes back blank, show something on the output once.
 
 ---
 

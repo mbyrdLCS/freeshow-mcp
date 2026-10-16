@@ -2,6 +2,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import fs from "fs";
+import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
 import { deleteShows } from "./deleteShows.js";
@@ -9,7 +11,7 @@ import { ThemeSchema, applyStyleToShow, listThemes, loadTheme, resolveStyle, sav
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.4.2",
+  version: "0.5.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -113,8 +115,9 @@ server.tool(
   async ({ id, value }) => {
     const before = await getShowData(id);
     const remembered = before.settings?.mcpTheme as RememberedTheme | undefined;
+    const hasImages = Object.keys(before.settings?.mcpImages ?? {}).length > 0;
     await callAction("set_plain_text", { id, value });
-    if (!remembered?.theme) return ok({ success: true });
+    if (!remembered?.theme && !hasImages) return ok({ success: true });
     // FreeShow applies the text a moment after the call returns. Re-styling before it lands lets
     // FreeShow's write pour all the text into the first box, so wait until the show stops changing.
     const original = JSON.stringify(before.slides);
@@ -127,7 +130,11 @@ server.tool(
       stable = now === last ? stable + 1 : 0;
       last = now;
     }
-    return ok({ success: true, themed: await reapplyTheme(id, remembered) });
+    if (remembered?.theme) return ok({ success: true, themed: await reapplyTheme(id, remembered) });
+    const show = await getShowData(id);
+    placeImages(show);
+    await callAction("set_show", { id, value: JSON.stringify(show) });
+    return ok({ success: true });
   }
 );
 
@@ -634,6 +641,32 @@ function labelSlides(text: string): string {
     .join("\n\n");
 }
 
+// Images added with add_image, remembered by layout position so they survive text rewrites
+type RememberedImage = { name: string; src: string; box: { top: number; left: number; width: number; height: number }; fit: string };
+const IMAGE_ID_PREFIX = "mcp-image-";
+
+function placeImages(show: Record<string, any>) {
+  const images = (show.settings?.mcpImages ?? {}) as Record<string, RememberedImage[]>;
+  for (const slide of Object.values<any>(show.slides ?? {})) {
+    slide.items = (slide.items ?? []).filter((it: any) => !String(it.id ?? "").startsWith(IMAGE_ID_PREFIX));
+  }
+  const refs: { id: string }[] = show.layouts?.[show.settings?.activeLayout]?.slides ?? [];
+  for (const [pos, list] of Object.entries(images)) {
+    const slide = show.slides?.[refs[Number(pos) - 1]?.id ?? ""];
+    if (!slide) continue;
+    for (const img of list) {
+      const { top, left, width, height } = img.box;
+      slide.items.push({
+        id: IMAGE_ID_PREFIX + img.name,
+        type: "media",
+        src: img.src,
+        fit: img.fit,
+        style: `top:${top}px;left:${left}px;width:${width}px;height:${height}px;`,
+      });
+    }
+  }
+}
+
 // FreeShow's create_show doesn't return the new ID, so find it by diffing the show list.
 async function createShowAndGetId(data: { text: string; name?: string; category?: string }): Promise<string | undefined> {
   const before = new Set(Object.keys(await getShowList()));
@@ -701,6 +734,7 @@ async function reapplyTheme(showId: string, remembered: RememberedTheme) {
     slideStyles[pos] = styleName;
   }
   show.settings = { ...show.settings, mcpTheme: { ...remembered, slideStyles } };
+  placeImages(show);
   await callAction("set_show", { id: showId, value: JSON.stringify(show) });
   return { theme: remembered.theme, style: remembered.style };
 }
@@ -755,6 +789,61 @@ server.tool(
     if (unknown.length) return ok({ error: `Not found: ${unknown.join(", ")}. Nothing was deleted.` });
     if (!targets.size) return ok({ error: "No shows given. Nothing was deleted." });
     return ok(await deleteShows([...targets]));
+  }
+);
+
+server.tool(
+  "add_image",
+  "Place an image (QR code, photo, logo) on a slide of a show. Positions are in px on a 1920x1080 slide. " +
+    "Re-using a name replaces that image. The image is remembered, so it stays put through text edits and theme changes.",
+  {
+    showId: z.string().describe("Show ID"),
+    slide: z.number().int().min(1).describe("Slide number in the layout, starting at 1"),
+    path: z.string().describe("Absolute path to the image file"),
+    name: z.string().optional().describe('Name for this image, e.g. "qr" (defaults to the file name)'),
+    top: z.number().describe("Top edge, px"),
+    left: z.number().describe("Left edge, px"),
+    width: z.number().describe("Width, px"),
+    height: z.number().describe("Height, px"),
+    fit: z.enum(["contain", "cover", "fill"]).optional().describe('How the image fills its box (default "contain")'),
+  },
+  async ({ showId, slide, path: src, name, top, left, width, height, fit }) => {
+    if (!fs.existsSync(src)) return ok({ error: `File not found: ${src}` });
+    const show = await getShowData(showId);
+    const count = show.layouts?.[show.settings?.activeLayout]?.slides?.length ?? 0;
+    if (slide > count) return ok({ error: `Slide ${slide} doesn't exist (the layout has ${count} slides)` });
+    const imageName = (name ?? path.basename(src, path.extname(src))).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const images = { ...(show.settings?.mcpImages ?? {}) } as Record<string, RememberedImage[]>;
+    images[slide] = [
+      ...(images[slide] ?? []).filter((img) => img.name !== imageName),
+      { name: imageName, src, box: { top, left, width, height }, fit: fit ?? "contain" },
+    ];
+    show.settings = { ...show.settings, mcpImages: images };
+    placeImages(show);
+    await callAction("set_show", { id: showId, value: JSON.stringify(show) });
+    return ok({ showId, slide, image: imageName });
+  }
+);
+
+server.tool(
+  "remove_image",
+  "Remove an image added with add_image",
+  {
+    showId: z.string().describe("Show ID"),
+    slide: z.number().int().min(1).describe("Slide number, starting at 1"),
+    name: z.string().describe("Image name (as returned by add_image)"),
+  },
+  async ({ showId, slide, name }) => {
+    const show = await getShowData(showId);
+    const images = { ...(show.settings?.mcpImages ?? {}) } as Record<string, RememberedImage[]>;
+    const before = images[slide]?.length ?? 0;
+    images[slide] = (images[slide] ?? []).filter((img) => img.name !== name);
+    if (images[slide].length === before) return ok({ error: `No image "${name}" on slide ${slide}` });
+    if (!images[slide].length) delete images[slide];
+    show.settings = { ...show.settings, mcpImages: images };
+    placeImages(show);
+    await callAction("set_show", { id: showId, value: JSON.stringify(show) });
+    return ok({ removed: name, slide });
   }
 );
 
@@ -821,7 +910,18 @@ server.tool(
     } | null;
     const match = /^data:(image\/\w+);base64,(.+)$/.exec(res?.data ?? "");
     if (!match) return ok({ error: "FreeShow returned no image. Show something on the output once, then retry." });
-    return { content: [{ type: "image" as const, mimeType: match[1], data: match[2] }] };
+    const content: ({ type: "image"; mimeType: string; data: string } | { type: "text"; text: string })[] = [
+      { type: "image", mimeType: match[1], data: match[2] },
+    ];
+    // FreeShow renders previews from the live output, so a running slide timer can leak into the capture
+    const output = (await callAction("get_output")) as { data?: { transition?: unknown } } | null;
+    if (output?.data?.transition) {
+      content.push({
+        type: "text",
+        text: "Warning: a timed slideshow is playing on the output, so this preview may show a different slide or a transition in progress.",
+      });
+    }
+    return { content };
   }
 );
 
