@@ -9,7 +9,7 @@ import { ThemeSchema, applyStyleToShow, listThemes, loadTheme, resolveStyle, sav
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.3.0",
+  version: "0.4.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -111,11 +111,11 @@ server.tool(
     value: z.string().describe("New plain-text content for the whole show"),
   },
   async ({ id, value }) => {
-    const remembered = (await getShowData(id)).settings?.mcpTheme as { theme?: string; style?: string } | undefined;
+    const remembered = (await getShowData(id)).settings?.mcpTheme as RememberedTheme | undefined;
     await callAction("set_plain_text", { id, value });
     if (!remembered?.theme) return ok({ success: true });
     await sleep(300);
-    return ok({ success: true, themed: await applyTheme(id, remembered.theme, remembered.style) });
+    return ok({ success: true, themed: await reapplyTheme(id, remembered) });
   }
 );
 
@@ -621,15 +621,62 @@ async function createShowAndGetId(data: { text: string; name?: string; category?
   return undefined;
 }
 
-async function applyTheme(showId: string, themeName: string, styleName?: string) {
+// slideStyles maps 1-based layout positions to style names. Positions (not slide IDs) are stored
+// because FreeShow gives slides new IDs whenever it rewrites a show's text.
+type RememberedTheme = { theme: string; style: string; slideStyles?: Record<string, string> };
+
+// Parent slide IDs at the given 1-based layout positions, plus their child slides
+function slideIdsAt(show: Record<string, any>, positions: number[]): Set<string> {
+  const refs: { id: string }[] = show.layouts?.[show.settings?.activeLayout]?.slides ?? [];
+  const ids = new Set<string>();
+  for (const n of positions) {
+    const ref = refs[n - 1];
+    if (!ref) throw new Error(`Slide ${n} doesn't exist (the layout has ${refs.length} slides)`);
+    ids.add(ref.id);
+    for (const child of show.slides?.[ref.id]?.children ?? []) ids.add(child);
+  }
+  return ids;
+}
+
+async function applyTheme(showId: string, themeName: string, styleName?: string, slides?: number[]) {
   const { theme, folder } = loadTheme(themeName);
   const { name, style } = resolveStyle(theme, styleName);
   const show = await getShowData(showId);
-  applyStyleToShow(show, style, folder);
+  const prev = show.settings?.mcpTheme as RememberedTheme | undefined;
+  let remembered: RememberedTheme;
+
+  if (slides?.length) {
+    const ids = slideIdsAt(show, slides);
+    applyStyleToShow(show, style, folder, ids);
+    const slideStyles = { ...(prev?.theme === theme.name ? prev.slideStyles : {}) };
+    for (const n of slides) slideStyles[n] = name;
+    remembered = { theme: theme.name, style: prev?.theme === theme.name ? prev.style : name, slideStyles };
+  } else {
+    applyStyleToShow(show, style, folder);
+    remembered = { theme: theme.name, style: name };
+  }
+
   // Remember the look so it can be re-applied after FreeShow rewrites the text
-  show.settings = { ...show.settings, mcpTheme: { theme: theme.name, style: name } };
+  show.settings = { ...show.settings, mcpTheme: remembered };
   await callAction("set_show", { id: showId, value: JSON.stringify(show) });
-  return { theme: theme.name, style: name };
+  return { theme: theme.name, style: name, ...(slides?.length && { slides }) };
+}
+
+// Re-apply a remembered theme: the show-wide style, then any per-slide styles whose slides still exist
+async function reapplyTheme(showId: string, remembered: RememberedTheme) {
+  const { theme, folder } = loadTheme(remembered.theme);
+  const show = await getShowData(showId);
+  applyStyleToShow(show, resolveStyle(theme, remembered.style).style, folder);
+  const slideCount = show.layouts?.[show.settings?.activeLayout]?.slides?.length ?? 0;
+  const slideStyles: Record<string, string> = {};
+  for (const [pos, styleName] of Object.entries(remembered.slideStyles ?? {})) {
+    if (Number(pos) > slideCount || !theme.styles[styleName]) continue;
+    applyStyleToShow(show, theme.styles[styleName], folder, slideIdsAt(show, [Number(pos)]));
+    slideStyles[pos] = styleName;
+  }
+  show.settings = { ...show.settings, mcpTheme: { ...remembered, slideStyles } };
+  await callAction("set_show", { id: showId, value: JSON.stringify(show) });
+  return { theme: remembered.theme, style: remembered.style };
 }
 
 server.tool(
@@ -714,13 +761,19 @@ server.tool(
 server.tool(
   "apply_theme",
   "Restyle an existing show with a theme style (fonts, colors, text box, background). " +
-    "Safe to re-apply or switch themes — it replaces what a previous theme added. Slide text is not changed.",
+    "Safe to re-apply or switch themes — it replaces what a previous theme added. Slide text is not changed. " +
+    'Pass slides to style only some slides (e.g. a "title" first slide in an announcements loop); ' +
+    "apply the show-wide style first, then per-slide styles.",
   {
     showId: z.string().describe("Show ID"),
     theme: z.string().describe("Theme id or name (see list_themes)"),
     style: z.string().optional().describe("Style within the theme (defaults to the theme's default style)"),
+    slides: z
+      .array(z.number().int().min(1))
+      .optional()
+      .describe("Only restyle these slide numbers (1 = first slide in the layout). Omit to style the whole show."),
   },
-  async ({ showId, theme, style }) => ok({ showId, ...(await applyTheme(showId, theme, style)) })
+  async ({ showId, theme, style, slides }) => ok({ showId, ...(await applyTheme(showId, theme, style, slides)) })
 );
 
 server.tool(

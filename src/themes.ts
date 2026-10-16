@@ -212,6 +212,8 @@ function isTextItem(item: AnyObj) {
 // for "lastLine" the body stays first and the last line becomes the secondary box.
 function splitTextItem(slide: AnyObj, mode: "firstLine" | "lastLine") {
   const textItems = slide.items.filter(isTextItem);
+  // Already split, but FreeShow dropped our marker when it rewrote the text: re-tag the second box
+  if (textItems.length === 2 && !textItems.some((it: AnyObj) => it.id === SPLIT_ID)) textItems[1].id = SPLIT_ID;
   if (textItems.length !== 1) return;
   const item = textItems[0];
   const lines = item.lines.filter((l: AnyObj) => (l.text ?? []).some((t: AnyObj) => String(t.value ?? "").trim()));
@@ -240,20 +242,24 @@ function mergeSplitItems(slide: AnyObj) {
 /**
  * Restyle a FreeShow show object in place using a theme style.
  * Re-applying is safe: anything a previous theme added is replaced, not duplicated.
+ * With slideIds, only those slides are restyled (background-layer mode is embedded instead,
+ * since the layer is shared by the whole show).
  */
-export function applyStyleToShow(show: AnyObj, style: ThemeStyle, folder: string) {
-  // Remove media/items added by an earlier theme application
+export function applyStyleToShow(show: AnyObj, style: ThemeStyle, folder: string, slideIds?: Set<string>) {
+  const whole = !slideIds;
+  // Remove media added by an earlier whole-show theme application
   show.media ??= {};
-  for (const key of Object.keys(show.media)) if (key.startsWith(THEME_ID_PREFIX)) delete show.media[key];
+  if (whole) for (const key of Object.keys(show.media)) if (key.startsWith(THEME_ID_PREFIX)) delete show.media[key];
 
   const bgPath = style.background?.image ? resolvePath(folder, style.background.image) : undefined;
   let bgKey: string | undefined;
-  if (bgPath && style.background?.layer) {
+  if (whole && bgPath && style.background?.layer) {
     bgKey = THEME_ID_PREFIX + "bg";
     show.media[bgKey] = { name: path.basename(bgPath), path: bgPath, type: "image" };
   }
 
-  for (const slide of Object.values<AnyObj>(show.slides ?? {})) {
+  for (const [id, slide] of Object.entries<AnyObj>(show.slides ?? {})) {
+    if (slideIds && !slideIds.has(id)) continue;
     mergeSplitItems(slide);
     slide.items = (slide.items ?? []).filter((it: AnyObj) => !String(it.id ?? "").startsWith(THEME_ID_PREFIX));
 
@@ -292,6 +298,8 @@ export function applyStyleToShow(show: AnyObj, style: ThemeStyle, folder: string
     if (style.background?.color) slide.settings.color = style.background.color;
     else delete slide.settings.color;
   }
+
+  if (!whole) return show;
 
   for (const layout of Object.values<AnyObj>(show.layouts ?? {})) {
     // FreeShow carries a layout background forward to later slides, so the first slide is enough

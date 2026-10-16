@@ -23,8 +23,10 @@ export async function fetchLyrics(query: string): Promise<{ title: string; artis
   const song = songs[0];
   const raw = await song.lyrics();
   const lyrics = raw
+    // Genius prefixes a header like "7 ContributorsSong Title Lyrics" (sometimes with a description)
+    .replace(/^\s*\d*\s*Contributors?[\s\S]*?Lyrics(?=\[|\n)/, "")
     .split("\n")
-    .filter((l) => !/^\d*Embed$/.test(l.trim()))
+    .filter((l) => !/^\d*Embed$/.test(l.trim()) && l.trim() !== "You might also like")
     .join("\n")
     .trim();
   return { title: song.title, artist: song.artist?.name ?? "", lyrics };

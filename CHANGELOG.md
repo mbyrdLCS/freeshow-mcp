@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-10-16
+
+### Added
+- `apply_theme` takes `slides` to style only some slides, so one show can mix styles (e.g. a title slide at the start of an announcements loop). Per-slide styles are remembered by position and survive `set_plain_text` edits.
+
+### Fixed
+- `import_song` / `search_songs` lyrics no longer start with the lyrics site's "7 ContributorsSong Title Lyrics" header.
+- Re-applying a split style after FreeShow rewrites a slide's text keeps the heading/body pair linked, so switching styles later merges them back correctly.
+
 ## 0.3.0 — 2026-10-16
 
 ### Added

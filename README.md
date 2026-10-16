@@ -280,7 +280,7 @@ Both machines can also be the same computer.
 | `list_themes` | List themes and their styles |
 | `get_theme` | Read a theme's full definition |
 | `save_theme` | Create or update a theme |
-| `apply_theme` | Restyle a show with a theme style |
+| `apply_theme` | Restyle a show (or just some slides) with a theme style |
 | `preview_slide` | Render a slide as an image |
 
 ---
@@ -305,6 +305,8 @@ Each theme has named **styles** — for example `lyrics`, `scripture`, `announce
 - `logo` — an optional image placed on every slide
 
 Start from the bundled example in [`themes/classic-dark`](themes/classic-dark/theme.json), or just ask Claude: *"Make a theme for our church using navy #1B2A41 and gold, with Georgia headings."*
+
+Different slides in one show can use different styles — e.g. an announcements loop whose first slide uses `title`: apply the show-wide style, then `apply_theme` again with `slides: [1]`.
 
 Applying a theme is safe to repeat or switch — it replaces what the previous theme added and never changes slide text. The show remembers its theme, so `set_plain_text` edits stay branded. If you add slides by hand in FreeShow, run `apply_theme` again.
 
