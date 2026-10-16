@@ -1,7 +1,7 @@
 {
   "name": "freeshow-mcp",
-  "version": "0.1.0",
-  "description": "MCP server for FreeShow presentation software",
+  "version": "0.2.0",
+  "description": "MCP server for FreeShow presentation software \u2014 control, build and theme church presentations with Claude",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -20,5 +20,26 @@
   "devDependencies": {
     "@types/node": "^22.10.1",
     "typescript": "^5.7.2"
-  }
+  },
+  "files": [
+    "dist",
+    "themes",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mbyrdLCS/freeshow-mcp.git"
+  },
+  "keywords": [
+    "freeshow",
+    "mcp",
+    "model-context-protocol",
+    "church",
+    "presentation",
+    "claude",
+    "worship"
+  ],
+  "license": "MIT"
 }

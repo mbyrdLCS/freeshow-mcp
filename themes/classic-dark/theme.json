@@ -1,0 +1,90 @@
+{
+  "name": "Classic Dark",
+  "description": "Example theme that works on any computer: white text on near-black, no image files needed. Copy it with get_theme + save_theme and change the colors/fonts to make your church's own.",
+  "defaultStyle": "lyrics",
+  "styles": {
+    "lyrics": {
+      "description": "Centered lyrics, bold sans-serif",
+      "background": { "color": "#111111" },
+      "text": {
+        "font": "Arial, Helvetica, sans-serif",
+        "size": 90,
+        "weight": 700,
+        "color": "#FFFFFF",
+        "lineHeight": 1.2,
+        "align": "center",
+        "box": { "top": 140, "left": 140, "width": 1640, "height": 800 }
+      }
+    },
+    "scripture": {
+      "description": "Verse text left-aligned; the last line (the reference) goes in its own box at the bottom",
+      "background": { "color": "#0B1A2A" },
+      "split": "lastLine",
+      "text": {
+        "font": "Georgia, 'Times New Roman', serif",
+        "size": 70,
+        "color": "#FFFFFF",
+        "lineHeight": 1.35,
+        "align": "left",
+        "box": { "top": 110, "left": 170, "width": 1580, "height": 820 }
+      },
+      "secondary": {
+        "font": "Arial, Helvetica, sans-serif",
+        "size": 44,
+        "weight": 700,
+        "color": "#9CC3E6",
+        "transform": "uppercase",
+        "letterSpacing": "3px",
+        "align": "center",
+        "box": { "top": 975, "left": 170, "width": 1580, "height": 70 }
+      }
+    },
+    "announcement": {
+      "description": "First line is the heading, the rest is body text",
+      "background": { "color": "#F4F4F4" },
+      "split": "firstLine",
+      "text": {
+        "font": "Georgia, serif",
+        "size": 96,
+        "weight": 700,
+        "color": "#111111",
+        "shadow": "none",
+        "align": "left",
+        "valign": "bottom",
+        "box": { "top": 120, "left": 160, "width": 1600, "height": 300 }
+      },
+      "secondary": {
+        "font": "Arial, Helvetica, sans-serif",
+        "size": 54,
+        "color": "#333333",
+        "shadow": "none",
+        "align": "left",
+        "valign": "top",
+        "lineHeight": 1.35,
+        "box": { "top": 470, "left": 160, "width": 1600, "height": 500 }
+      }
+    },
+    "heading": {
+      "description": "Big centered title; an optional second line becomes a subtitle",
+      "background": { "color": "#111111" },
+      "split": "firstLine",
+      "text": {
+        "font": "Georgia, serif",
+        "size": 130,
+        "weight": 700,
+        "color": "#FFFFFF",
+        "align": "center",
+        "box": { "top": 300, "left": 160, "width": 1600, "height": 360 }
+      },
+      "secondary": {
+        "font": "Arial, Helvetica, sans-serif",
+        "size": 52,
+        "color": "#BBBBBB",
+        "transform": "uppercase",
+        "letterSpacing": "6px",
+        "align": "center",
+        "box": { "top": 690, "left": 160, "width": 1600, "height": 120 }
+      }
+    }
+  }
+}

@@ -2,7 +2,16 @@
 
 > Control [FreeShow](https://freeshow.app) with Claude AI via the [Model Context Protocol](https://modelcontextprotocol.io/).
 
-Exposes 40+ tools that let Claude (or any MCP client) control FreeShow presentations: navigate slides, manage shows and projects, control audio/video, start timers, display scripture, change variables, and more.
+Exposes 90+ tools that let Claude (or any MCP client) control FreeShow presentations: navigate slides, build and **brand** shows, import songs, manage service projects, control audio/video, start timers, display scripture, and more.
+
+**Highlights**
+
+- **Themes** — define your church's look once (fonts, colors, backgrounds, logo) and apply it to any show. New songs and announcements come out branded automatically, and lyric edits keep the look. See [Themes](#themes).
+- **Slide previews** — Claude can render a slide as an image to check how it looks.
+- **Song import** — search for a song and create a show from its lyrics in one step.
+- **Service building** — create projects, add shows, set up looping announcement slideshows.
+
+> This is a maintained fork of [restonauta/freeshow-mcp](https://github.com/restonauta/freeshow-mcp), with the API fixes and new tools listed in [CHANGELOG.md](CHANGELOG.md). Issues and pull requests are welcome.
 
 ---
 
@@ -18,16 +27,18 @@ Exposes 40+ tools that let Claude (or any MCP client) control FreeShow presentat
 
 ### 1. Enable FreeShow API
 
-Open FreeShow → **Settings** → **Connections** → enable **WebSocket/REST API**.
+Open FreeShow → **Settings** → **Connections** → enable **API**.
 
 Default port: `5506`. Note the IP address shown — you'll need it if FreeShow runs on a different machine.
+
+> If every tool fails with `fetch failed`, the API is turned off (or on a different port).
 
 ### 2. Install freeshow-mcp
 
 **Option A — clone and build (recommended)**
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/freeshow-mcp.git
+git clone https://github.com/mbyrdLCS/freeshow-mcp.git
 cd freeshow-mcp
 npm install
 npm run build
@@ -126,7 +137,7 @@ Both machines can also be the same computer.
 | `next_slide` | Go to the next slide |
 | `previous_slide` | Go to the previous slide |
 | `random_slide` | Jump to a random slide |
-| `select_slide_by_index` | Select slide by index number |
+| `select_slide_by_index` | Select slide by number (1 = first slide) |
 | `select_slide_by_name` | Jump to slide by text/name |
 
 ### Shows
@@ -135,15 +146,19 @@ Both machines can also be the same computer.
 |------|-------------|
 | `select_show_by_name` | Select and present a show by name |
 | `start_show` | Start a show by ID |
+| `select_show_by_id` | Open a show by ID without presenting it |
 | `get_shows` | List all available shows |
 | `get_show` | Get details of a specific show |
 | `get_show_layout` | Get the slide order of a show |
 | `change_layout` | Switch a show to a different layout |
 | `get_plain_text` | Read a show's content as plain text (with `[Group]` labels) |
-| `set_plain_text` | Rewrite a show's content from plain text |
+| `set_plain_text` | Rewrite a show's content from plain text (re-applies its theme) |
 | `get_groups` | Get a show's slide groups (Verse, Chorus, …) |
 | `select_group_by_id` | Jump straight to a slide group (e.g. the chorus) |
-| `set_template` | Apply a template to the active show |
+| `set_template` | Apply a FreeShow template to the active show |
+| `set_slide_timers` | Auto-advance every slide (e.g. a looping announcements loop) |
+| `disable_slide` | Hide/unhide a slide in the layout |
+| `set_show` | Advanced: replace a show's full data |
 | `get_output_slide_text` | Get text of the currently displayed slide |
 | `get_output_group_name` | Get the group name of the displayed slide |
 
@@ -158,9 +173,12 @@ Both machines can also be the same computer.
 | `rename_project` | Rename a project |
 | `remove_project_item` | Remove an item from a project |
 | `select_project_by_name` | Open a project by name |
+| `select_project_by_id` | Open a project by ID |
+| `start_project_item_by_name` | Present a project item by name |
+| `delete_project` | Delete a project (its shows are kept) |
 | `next_project_item` | Move to next item in project |
 | `previous_project_item` | Move to previous item in project |
-| `select_project_item_by_index` | Jump to project item by index |
+| `select_project_item_by_index` | Jump to project item by number (1 = first) |
 
 ### Clear / Output
 
@@ -176,6 +194,9 @@ Both machines can also be the same computer.
 | `get_output` | Get current output state |
 | `get_cleared` | See which output layers are cleared |
 | `restore_output` | Restore last active slide |
+| `toggle_output_windows` | Show/hide the output windows |
+| `toggle_output` | Turn a specific output on/off |
+| `change_transition` | Change slide or media transition |
 
 ### Audio
 
@@ -183,6 +204,8 @@ Both machines can also be the same computer.
 |------|-------------|
 | `play_audio` | Play an audio file |
 | `stop_audio` | Stop an audio file |
+| `pause_audio` | Pause/resume an audio file |
+| `mute` | Mute/unmute audio |
 | `change_volume` | Set master volume (0–100) |
 | `start_playlist` | Start a playlist by ID |
 | `start_playlist_by_name` | Start a playlist by name |
@@ -197,6 +220,9 @@ Both machines can also be the same computer.
 | `toggle_playing_media` | Pause/resume current media |
 | `get_playing_video_time` | Get current video playback position |
 | `get_playing_video_duration` | Get total video duration |
+| `video_seek_to` | Jump the playing video to a time |
+| `toggle_media_loop` | Toggle video looping |
+| `toggle_media_mute` | Toggle video mute |
 
 ### Timers
 
@@ -208,6 +234,7 @@ Both machines can also be the same computer.
 | `pause_timers` | Pause all timers |
 | `stop_timers` | Stop all timers |
 | `edit_timer` | Edit a timer property |
+| `stop_timer_by_id` | Stop a specific timer |
 
 ### Scripture
 
@@ -222,24 +249,65 @@ Both machines can also be the same computer.
 | Tool | Description |
 |------|-------------|
 | `get_variables` | List all variables |
+| `get_variable` | Get one variable by ID or name |
 | `change_variable` | Change a variable value |
 | `run_action_by_name` | Run a saved action by name |
 | `run_action_by_id` | Run a saved action by ID |
 | `start_trigger` | Fire a trigger by ID |
+| `get_actions` | List saved actions |
+| `toggle_action` | Enable/disable an action's trigger |
 
 ### Overlays
 
 | Tool | Description |
 |------|-------------|
 | `select_overlay_by_name` | Enable an overlay by name |
+| `select_overlay_by_id` | Enable an overlay by ID |
 
 ### Create
 
 | Tool | Description |
 |------|-------------|
-| `create_show` | Create a new show from text — blank line = new slide, `[Verse 1]` / `[Chorus]` labels create named slide groups |
+| `create_show` | Create a show from text and return its ID — blank line = new slide, `[Verse 1]` / `[Chorus]` labels create named slide groups; optional `theme` |
 | `search_songs` | Search the web for a song by title/artist (same sources as FreeShow's built-in search) |
-| `import_song` | Search, fetch lyrics, and create a show in one step (ensure you're licensed, e.g. CCLI/PraiseCharts) |
+| `import_song` | Search, fetch lyrics, and create a show in one step; optional `theme` (ensure you're licensed, e.g. CCLI/PraiseCharts) |
+
+### Themes & Preview
+
+| Tool | Description |
+|------|-------------|
+| `list_themes` | List themes and their styles |
+| `get_theme` | Read a theme's full definition |
+| `save_theme` | Create or update a theme |
+| `apply_theme` | Restyle a show with a theme style |
+| `preview_slide` | Render a slide as an image |
+
+---
+
+## Themes
+
+A theme is your church's look, saved as a folder with a `theme.json` and any images it uses:
+
+```
+~/Documents/FreeShow/MCP Themes/
+  my-church/
+    theme.json
+    backgrounds/lyrics.png
+```
+
+Each theme has named **styles** — for example `lyrics`, `scripture`, `announcement`, `heading` — and each style sets:
+
+- `background` — a solid `color` and/or an `image` (embedded in the slide so it shows in previews; set `"layer": true` to use FreeShow's background layer instead)
+- `text` — font, size, color, weight, alignment, shadow and the text box position (on a 1920×1080 slide)
+- `secondary` — style for a second text box (a subtitle, or a scripture reference)
+- `split` — `"firstLine"` or `"lastLine"` to move a heading or reference into that second box automatically
+- `logo` — an optional image placed on every slide
+
+Start from the bundled example in [`themes/classic-dark`](themes/classic-dark/theme.json), or just ask Claude: *"Make a theme for our church using navy #1B2A41 and gold, with Georgia headings."*
+
+Applying a theme is safe to repeat or switch — it replaces what the previous theme added and never changes slide text. The show remembers its theme, so `set_plain_text` edits stay branded. If you add slides by hand in FreeShow, run `apply_theme` again.
+
+> Fonts must be installed on the computer running FreeShow. List fallbacks (e.g. `"Montserrat, Arial, sans-serif"`) so slides still look right elsewhere.
 
 ---
 
@@ -248,6 +316,9 @@ Both machines can also be the same computer.
 Once configured, you can talk to Claude naturally:
 
 ```
+"Import 'Living Hope' by Phil Wickham with our church theme"
+"Make an announcements slideshow that loops every 8 seconds"
+"Show me a preview of slide 2"
 "Next slide"
 "Go back to the previous slide"
 "Show the song 'Amazing Grace'"
@@ -268,6 +339,16 @@ Once configured, you can talk to Claude naturally:
 |----------|---------|-------------|
 | `FREESHOW_HOST` | `localhost` | IP or hostname of the FreeShow machine |
 | `FREESHOW_PORT` | `5506` | REST API port |
+| `FREESHOW_MCP_THEMES_DIR` | `~/Documents/FreeShow/MCP Themes` | Where your themes are stored |
+
+---
+
+## Good to Know
+
+- **Save in FreeShow.** Changes made through the API live in FreeShow's memory until it saves. If autosave is off, press Cmd/Ctrl+S.
+- **Deleting shows** isn't possible through FreeShow's API — delete them in FreeShow itself.
+- **Numbers start at 1.** Slide and project-item numbers in tools are 1-based, matching FreeShow's API.
+- **Previews** render the slide (including theme backgrounds) but not media playing on the background layer. If a preview comes back blank, show something on the output once.
 
 ---
 
