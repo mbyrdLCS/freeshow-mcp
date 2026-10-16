@@ -4,11 +4,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
+import { deleteShows } from "./deleteShows.js";
 import { ThemeSchema, applyStyleToShow, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.2.0",
+  version: "0.3.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -652,6 +653,32 @@ server.tool(
     if (!id) return ok({ created: name, warning: "Show was sent to FreeShow but its ID could not be confirmed" });
     const themed = theme ? await applyTheme(id, theme, style) : undefined;
     return ok({ created: name, id, ...(themed && { themed }) });
+  }
+);
+
+server.tool(
+  "delete_shows",
+  "Delete shows. FreeShow's API can't delete shows, so this saves and CLOSES FreeShow, removes the shows, " +
+    "and reopens it (about 10–20 seconds). Never use during a service. Only works when FreeShow runs on this " +
+    "computer. Deleted files are moved to an 'MCP Deleted Shows' folder in FreeShow's data folder so they can be recovered. " +
+    "Ask the user before calling this.",
+  {
+    ids: z.array(z.string()).optional().describe("Show IDs to delete (from get_shows)"),
+    names: z.array(z.string()).optional().describe("Exact show names to delete"),
+    confirm: z.literal(true).describe("Must be true — confirms FreeShow may be restarted"),
+  },
+  async ({ ids, names }) => {
+    const shows = await getShowList();
+    const targets = new Set(ids ?? []);
+    const unknown = [...targets].filter((id) => !shows[id]);
+    for (const name of names ?? []) {
+      const matches = Object.keys(shows).filter((id) => shows[id].name?.toLowerCase() === name.toLowerCase());
+      if (matches.length) matches.forEach((id) => targets.add(id));
+      else unknown.push(name);
+    }
+    if (unknown.length) return ok({ error: `Not found: ${unknown.join(", ")}. Nothing was deleted.` });
+    if (!targets.size) return ok({ error: "No shows given. Nothing was deleted." });
+    return ok(await deleteShows([...targets]));
   }
 );
 

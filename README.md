@@ -159,6 +159,7 @@ Both machines can also be the same computer.
 | `set_slide_timers` | Auto-advance every slide (e.g. a looping announcements loop) |
 | `disable_slide` | Hide/unhide a slide in the layout |
 | `set_show` | Advanced: replace a show's full data |
+| `delete_shows` | Delete shows by ID or name (briefly restarts FreeShow — not during a service) |
 | `get_output_slide_text` | Get text of the currently displayed slide |
 | `get_output_group_name` | Get the group name of the displayed slide |
 
@@ -340,13 +341,14 @@ Once configured, you can talk to Claude naturally:
 | `FREESHOW_HOST` | `localhost` | IP or hostname of the FreeShow machine |
 | `FREESHOW_PORT` | `5506` | REST API port |
 | `FREESHOW_MCP_THEMES_DIR` | `~/Documents/FreeShow/MCP Themes` | Where your themes are stored |
+| `FREESHOW_APP_PATH` | *(auto)* | FreeShow app location, if `delete_shows` can't reopen it (unusual install folder) |
 
 ---
 
 ## Good to Know
 
 - **Save in FreeShow.** Changes made through the API live in FreeShow's memory until it saves. If autosave is off, press Cmd/Ctrl+S.
-- **Deleting shows** isn't possible through FreeShow's API — delete them in FreeShow itself.
+- **Deleting shows** isn't part of FreeShow's API, so `delete_shows` asks FreeShow to save and close, removes the shows, and reopens it (~10 seconds). It refuses while a slide is on screen and only works when FreeShow runs on the same computer. Deleted files go to `MCP Deleted Shows/` in FreeShow's data folder, so they can be recovered.
 - **Numbers start at 1.** Slide and project-item numbers in tools are 1-based, matching FreeShow's API.
 - **Previews** render the slide (including theme backgrounds) but not media playing on the background layer. If a preview comes back blank, show something on the output once.
 

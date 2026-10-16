@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 — 2026-10-16
+
+### Added
+- `delete_shows` — delete shows by ID or name. FreeShow's API has no delete action, so it saves and closes FreeShow, moves the show files to `MCP Deleted Shows/` (recoverable), and reopens FreeShow. Requires `confirm: true`, refuses while a slide is on screen, and only runs when FreeShow is on the same computer.
+
 ## 0.2.0 — 2026-10-16
 
 ### Added
