@@ -83,6 +83,8 @@ interface Ref {
   from?: number;
   to?: number;
   toChapter?: number;
+  fromPart?: "a" | "b"; // "16b": start halfway through the first verse
+  toPart?: "a" | "b"; // "44a": stop halfway through the last verse
 }
 
 /** Parse "John 3:16-18; Eph 2:8, 10" into individual references (later parts inherit book/chapter). */
@@ -90,7 +92,14 @@ export function parseReferences(input: string): Ref[] {
   const refs: Ref[] = [];
   let book = "";
   let chapter = 0;
-  for (const raw of input.split(/[;,]/).map((s) => s.trim()).filter(Boolean)) {
+  for (const rawPart of input.split(/[;,]/).map((s) => s.trim()).filter(Boolean)) {
+    // Partial verses: "41-44a" ends with the first half of 44; "16b-18" starts with the second half of 16
+    const parts = [...rawPart.matchAll(/(\d)([ab])\b/gi)].map((m) => m[2].toLowerCase() as "a" | "b");
+    const raw = rawPart.replace(/(\d)[ab]\b/gi, "$1");
+    const isRange = /[-–—]/.test(raw);
+    const fromPart = /^\D*\d+:\d+[ab]/i.test(rawPart) || (!isRange && parts.length) ? parts[0] : undefined;
+    const toPart = isRange && /[ab]\s*$/i.test(rawPart) ? parts[parts.length - 1] : !isRange ? fromPart : undefined;
+    const before = refs.length;
     const full = /^((?:[1-3]\s*)?[A-Za-z][A-Za-z .]*?)\s*(\d+)(?::(\d+)(?:\s*[-–—]\s*(?:(\d+):)?(\d+))?)?$/.exec(raw);
     if (full) {
       book = full[1].trim();
@@ -98,13 +107,14 @@ export function parseReferences(input: string): Ref[] {
       if (!full[3]) refs.push({ book, chapter });
       else if (full[4]) refs.push({ book, chapter, from: Number(full[3]), toChapter: Number(full[4]), to: Number(full[5]) });
       else refs.push({ book, chapter, from: Number(full[3]), to: Number(full[5] ?? full[3]) });
+      if (refs.length > before) Object.assign(refs[refs.length - 1], { fromPart, toPart });
       continue;
     }
     // Continuation like "31" or "31-33" or "4:2" after an earlier reference
     const cont = /^(?:(\d+):)?(\d+)(?:\s*[-–—]\s*(\d+))?$/.exec(raw);
     if (cont && book) {
       if (cont[1]) chapter = Number(cont[1]);
-      refs.push({ book, chapter, from: Number(cont[2]), to: Number(cont[3] ?? cont[2]) });
+      refs.push({ book, chapter, from: Number(cont[2]), to: Number(cont[3] ?? cont[2]), fromPart, toPart });
       continue;
     }
     throw new Error(`Couldn't read the reference "${raw}"`);
@@ -122,6 +132,19 @@ function cleanText(text: string): string {
     .replace(/\bG\s+OD\b/g, "GOD")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+// First ("a") or second ("b") half of a verse, split at the sentence boundary nearest the middle
+function halfVerse(text: string, part: "a" | "b"): string {
+  const sentences = text.match(/[^.!?;:]+[.!?;:]+["'’”)]*\s*|[^.!?;:]+$/g)?.map((x) => x.trim()) ?? [text];
+  if (sentences.length < 2) return text;
+  let best = 1;
+  let bestDiff = Infinity;
+  for (let i = 1; i < sentences.length; i++) {
+    const diff = Math.abs(sentences.slice(0, i).join(" ").length - text.length / 2);
+    if (diff < bestDiff) [best, bestDiff] = [i, diff];
+  }
+  return (part === "a" ? sentences.slice(0, best) : sentences.slice(best)).join(" ");
 }
 
 export async function fetchPassage(reference: string, translation: string): Promise<{ reference: string; abbr: string; verses: Verse[] }> {
@@ -143,14 +166,18 @@ export async function fetchPassage(reference: string, translation: string): Prom
     const range = `${book.keyName}.${ref.chapter}.${from}-${book.keyName}.${toChapter}.${to}`;
     const data = await getJson<{ chapterNumber?: number; verseKey: string; verseNumber: number; content: string }[]>(`${API}/${t.id}/verses/${range}`);
     if (!data.length) throw new Error(`No verses found for ${reference} in ${t.abbr}`);
-    for (const v of data) {
+    data.forEach((v, i) => {
       const chapter = v.chapterNumber ?? Number(v.verseKey.split(".")[1]);
-      verses.push({ reference: `${bookName} ${chapter}:${v.verseNumber}`, text: cleanText(v.content) });
-    }
+      let text = cleanText(v.content);
+      let suffix = "";
+      if (i === data.length - 1 && ref.toPart) [text, suffix] = [halfVerse(text, ref.toPart), ref.toPart];
+      else if (i === 0 && ref.fromPart) [text, suffix] = [halfVerse(text, ref.fromPart), ref.fromPart];
+      verses.push({ reference: `${bookName} ${chapter}:${v.verseNumber}${suffix}`, text });
+    });
     labels.push(
       ref.from === undefined
         ? `${bookName} ${ref.chapter}`
-        : `${bookName} ${ref.chapter}:${from}${toChapter !== ref.chapter ? `-${toChapter}:${to}` : to !== from ? `-${to}` : ""}`
+        : `${bookName} ${ref.chapter}:${from}${ref.fromPart ?? ""}${toChapter !== ref.chapter ? `-${toChapter}:${to}` : to !== from ? `-${to}` : ""}${to !== from && ref.toPart ? ref.toPart : ""}`
     );
   }
   return { reference: labels.join("; "), abbr: t.abbr, verses };

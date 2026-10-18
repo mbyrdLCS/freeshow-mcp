@@ -12,7 +12,7 @@ import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThem
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.11.0",
+  version: "0.11.1",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -982,7 +982,7 @@ server.tool(
   "Fetch Bible passages and build a scripture show: one slide per verse (long verses split), with the reference " +
     "on the last line of each slide so a theme's scripture style shows it under the text. Uses the same online Bibles " +
     "as FreeShow (NIV, NASB, AMP, KJV, BSB, WEB… — see list_bible_translations). References can be written naturally: " +
-    '"Psalm 23", "John 3:16-18", "Rom 8:28, 31", "Eph 2:8-9; 6:10". Optionally adds it to a project, placed before a given item.',
+    '"Psalm 23", "John 3:16-18", "Rom 8:28, 31", "Eph 2:8-9; 6:10", "Luke 2:41-44a" (a/b = first/second half of a verse). Optionally adds it to a project, placed before a given item.',
   {
     references: z.array(z.string()).min(1).describe('Passages in order, e.g. ["Ephesians 6:10-18", "John 3:16"]'),
     translation: z.string().optional().describe('Translation abbreviation, e.g. "NIV", "KJV", "NASB" (default "KJV")'),

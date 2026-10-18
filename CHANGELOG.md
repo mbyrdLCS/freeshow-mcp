@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.1 — 2026-10-18
+
+### Added
+- Scripture references understand half verses: "Luke 2:41-44a" ends with the first half of verse 44 and "John 3:16b-18" starts halfway through 16. Verses are split at the sentence nearest the middle, and slides are labeled "Luke 2:44a".
+
 ## 0.11.0 — 2026-10-18
 
 ### Added
