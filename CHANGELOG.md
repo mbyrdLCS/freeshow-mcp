@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0 — 2026-10-18
+
+### Added
+- `set_slide_transition` — set a show's slide transition (`none`, `crossfade`, `fade`, `default`), including the slides inside each group, which FreeShow stores separately under the parent.
+- `set_slide_timers` takes `transition` / `transitionMs`, e.g. a crossfade for announcement loops. FreeShow's default fade dips through black, which flashes when backgrounds are part of the slides.
+
 ## 0.11.1 — 2026-10-18
 
 ### Added

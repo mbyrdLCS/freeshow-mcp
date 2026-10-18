@@ -156,7 +156,8 @@ Both machines can also be the same computer.
 | `get_groups` | Get a show's slide groups (Verse, Chorus, …) |
 | `select_group_by_id` | Jump straight to a slide group (e.g. the chorus) |
 | `set_template` | Apply a FreeShow template to the active show |
-| `set_slide_timers` | Auto-advance every slide (e.g. a looping announcements loop) |
+| `set_slide_timers` | Auto-advance every slide (e.g. a looping announcements loop), optionally with a crossfade |
+| `set_slide_transition` | Per-show transition: `none` (instant cut), `crossfade`, `fade` or back to default |
 | `disable_slide` | Hide/unhide a slide in the layout |
 | `set_show` | Advanced: replace a show's full data |
 | `delete_shows` | Delete shows by ID or name (briefly restarts FreeShow — not during a service) |
@@ -365,6 +366,7 @@ Once configured, you can talk to Claude naturally:
 
 - **Save in FreeShow.** Changes made through the API live in FreeShow's memory until it saves. If autosave is off, press Cmd/Ctrl+S.
 - **Deleting shows** isn't part of FreeShow's API, so `delete_shows` asks FreeShow to save and close, removes the shows, and reopens it (~10 seconds). It refuses while a slide is on screen and only works when FreeShow runs on the same computer. Deleted files go to `MCP Deleted Shows/` in FreeShow's data folder, so they can be recovered.
+- **Themed slides and transitions.** Theme backgrounds are part of each slide, so FreeShow's default "fade" dips through black between slides. Use `set_slide_transition` with `none` (instant) or `crossfade`, or set FreeShow's global text transition to none with `change_transition`.
 - **Numbers start at 1.** Slide and project-item numbers in tools are 1-based, matching FreeShow's API.
 - **Previews** are built from the live output, so while a timed slideshow is playing they can show the wrong slide (the tool warns you). They render the slide (including theme backgrounds) but not media playing on the background layer. If a preview comes back blank, show something on the output once.
 

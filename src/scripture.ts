@@ -1,3 +1,7 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
+
 // Bible text from ChurchApps' Bible service — the same source FreeShow's online Bibles use
 // (API.Bible and YouVersion, including licensed translations like NIV and NASB). No key needed.
 
@@ -198,4 +202,81 @@ export function splitLongText(text: string, maxChars: number): string[] {
   }
   if (rest) pieces.push(rest);
   return pieces;
+}
+
+// ─── ESV (Crossway's API) ─────────────────────────────────────────────────────
+// The ESV isn't in FreeShow's Bible list. Crossway offers a free API key for non-commercial use
+// (api.esv.org); quotes must be labeled "ESV". The key is kept in a local config file, not the repo.
+
+const CONFIG_FILE = path.join(os.homedir(), ".freeshow-mcp", "config.json");
+
+function readConfig(): Record<string, string> {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export function saveEsvKey(key: string) {
+  fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...readConfig(), esvApiKey: key.trim() }, null, 2), { mode: 0o600 });
+  return CONFIG_FILE;
+}
+
+function esvKey(): string | undefined {
+  return process.env.FREESHOW_MCP_ESV_KEY || readConfig().esvApiKey;
+}
+
+export const isEsv = (translation: string) => norm(translation) === "esv";
+
+export async function fetchEsvPassage(reference: string): Promise<{ reference: string; abbr: string; verses: Verse[] }> {
+  const key = esvKey();
+  if (!key) throw new Error("ESV needs a free API key from api.esv.org — save it with set_esv_api_key");
+  const verses: Verse[] = [];
+  const labels: string[] = [];
+  for (const ref of parseReferences(reference)) {
+    const span = ref.from === undefined ? "" : `:${ref.from}${ref.toChapter && ref.toChapter !== ref.chapter ? `-${ref.toChapter}:${ref.to}` : ref.to !== ref.from ? `-${ref.to}` : ""}`;
+    const q = `${ref.book} ${ref.chapter}${span}`;
+    const params = new URLSearchParams({
+      q,
+      "include-passage-references": "false",
+      "include-verse-numbers": "true",
+      "include-first-verse-numbers": "true",
+      "include-footnotes": "false",
+      "include-headings": "false",
+      "include-short-copyright": "false",
+      "include-copyright": "false",
+      "indent-paragraphs": "0",
+      "indent-poetry": "false",
+      "line-length": "0",
+    });
+    const res = await fetch(`https://api.esv.org/v3/passage/text/?${params}`, {
+      headers: { Authorization: `Token ${key}` },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (res.status === 401 || res.status === 403) throw new Error("The ESV API key was rejected — check it at api.esv.org");
+    if (!res.ok) throw new Error(`ESV API returned HTTP ${res.status}`);
+    const data = (await res.json()) as { canonical?: string; passages?: string[] };
+    const passage = data.passages?.[0];
+    if (!passage || !data.canonical) throw new Error(`Couldn't find "${q}" in the ESV`);
+    const bookName = data.canonical.replace(/\s+\d+(?::[\d–-]+)?(?:[–-]\d+(?::\d+)?)?$/, "");
+
+    // "[16] For God so loved… [17] For God did not…": split on the verse markers
+    const pieces = [...passage.matchAll(/\[(\d+)\]\s*([\s\S]*?)(?=\s*\[\d+\]|$)/g)];
+    let chapter = ref.chapter;
+    let prev = 0;
+    pieces.forEach(([, num, body], i) => {
+      const n = Number(num);
+      if (n < prev) chapter++; // crossed into the next chapter
+      prev = n;
+      let text = cleanText(body);
+      let suffix = "";
+      if (i === pieces.length - 1 && ref.toPart) [text, suffix] = [halfVerse(text, ref.toPart), ref.toPart];
+      else if (i === 0 && ref.fromPart) [text, suffix] = [halfVerse(text, ref.fromPart), ref.fromPart];
+      verses.push({ reference: `${bookName} ${chapter}:${n}${suffix}`, text });
+    });
+    labels.push(data.canonical.replace("–", "-") + (ref.toPart && ref.to !== ref.from ? ref.toPart : ""));
+  }
+  return { reference: labels.join("; "), abbr: "ESV", verses };
 }

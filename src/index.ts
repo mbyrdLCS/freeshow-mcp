@@ -6,13 +6,13 @@ import fs from "fs";
 import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
-import { fetchPassage, findTranslation, listTranslations, splitLongText } from "./scripture.js";
+import { fetchEsvPassage, fetchPassage, findTranslation, isEsv, listTranslations, saveEsvKey, splitLongText } from "./scripture.js";
 import { deleteShows, readOverlays, updateSyncedSettings, withFreeShowClosed, writeOverlays, writeTemplates } from "./deleteShows.js";
 import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.11.1",
+  version: "0.12.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -196,18 +196,55 @@ server.tool(
     showId: z.string().describe("Show ID"),
     seconds: z.number().min(0).describe("Seconds each slide stays up (0 = remove timers)"),
     loop: z.boolean().optional().describe("Go back to the first slide after the last one (default true)"),
+    transition: z
+      .enum(["crossfade", "fade", "none"])
+      .optional()
+      .describe('Transition between these slides. "crossfade" blends straight from one slide to the next; FreeShow\'s usual "fade" dips through black, which flashes on light slides. Omit to leave as is.'),
+    transitionMs: z.number().optional().describe("Transition length in ms (default 800)"),
   },
-  async ({ showId, seconds, loop }) => {
+  async ({ showId, seconds, loop, transition, transitionMs }) => {
     const show = await getShowData(showId);
     const slides: Record<string, any>[] = show.layouts?.[show.settings?.activeLayout]?.slides ?? [];
     slides.forEach((ref, i) => {
+      if (transition) ref.transition = { type: transition, duration: transition === "none" ? 0 : transitionMs ?? 800, easing: "sine" };
       if (seconds > 0) ref.nextTimer = seconds;
       else delete ref.nextTimer;
       if (seconds > 0 && (loop ?? true) && i === slides.length - 1) ref.end = true;
       else delete ref.end;
     });
     await callAction("set_show", { id: showId, value: JSON.stringify(show) });
-    return ok({ showId, slides: slides.length, seconds, loop: seconds > 0 && (loop ?? true) });
+    return ok({ showId, slides: slides.length, seconds, loop: seconds > 0 && (loop ?? true), ...(transition && { transition }) });
+  }
+);
+
+server.tool(
+  "set_slide_transition",
+  "Set the transition for every slide of a show (only that show changes). \"crossfade\" blends straight to the next slide, so a " +
+    "background shared by the slides stays steady while only the words change; FreeShow's usual \"fade\" dips through black, " +
+    "which blinks when backgrounds are part of the slides (as with themes). \"none\" cuts instantly. \"default\" removes the override.",
+  {
+    showId: z.string().describe("Show ID"),
+    type: z.enum(["crossfade", "fade", "none", "default"]).describe("Transition type"),
+    ms: z.number().optional().describe("Length in ms (default 600)"),
+  },
+  async ({ showId, type, ms }) => {
+    const show = await getShowData(showId);
+    const slides: Record<string, any>[] = show.layouts?.[show.settings?.activeLayout]?.slides ?? [];
+    const transition = { type, duration: type === "none" ? 0 : ms ?? 600, easing: "sine" };
+    for (const ref of slides) {
+      if (type === "default") delete ref.transition;
+      else ref.transition = transition;
+      // Slides inside a group (e.g. the 2nd slide of a verse) are configured under the parent's "children"
+      for (const childId of show.slides?.[ref.id]?.children ?? []) {
+        ref.children ??= {};
+        const child = { ...(ref.children[childId] ?? {}) };
+        if (type === "default") delete child.transition;
+        else child.transition = transition;
+        ref.children[childId] = child;
+      }
+    }
+    await callAction("set_show", { id: showId, value: JSON.stringify(show) });
+    return ok({ showId, slides: slides.length, transition: type });
   }
 );
 
@@ -978,6 +1015,22 @@ server.tool(
 );
 
 server.tool(
+  "set_esv_api_key",
+  "Save a free ESV API key from api.esv.org so create_scripture_show can use the ESV (Crossway). " +
+    "Stored privately on this computer (~/.freeshow-mcp/config.json), never in the shared code.",
+  { key: z.string().min(20).describe("The token from your api.esv.org application") },
+  async ({ key }) => {
+    saveEsvKey(key);
+    try {
+      const test = await fetchEsvPassage("John 11:35");
+      return ok({ saved: true, test: `${test.verses[0].reference} ESV: ${test.verses[0].text}` });
+    } catch (err) {
+      return ok({ saved: true, warning: (err as Error).message });
+    }
+  }
+);
+
+server.tool(
   "create_scripture_show",
   "Fetch Bible passages and build a scripture show: one slide per verse (long verses split), with the reference " +
     "on the last line of each slide so a theme's scripture style shows it under the text. Uses the same online Bibles " +
@@ -985,7 +1038,7 @@ server.tool(
     '"Psalm 23", "John 3:16-18", "Rom 8:28, 31", "Eph 2:8-9; 6:10", "Luke 2:41-44a" (a/b = first/second half of a verse). Optionally adds it to a project, placed before a given item.',
   {
     references: z.array(z.string()).min(1).describe('Passages in order, e.g. ["Ephesians 6:10-18", "John 3:16"]'),
-    translation: z.string().optional().describe('Translation abbreviation, e.g. "NIV", "KJV", "NASB" (default "KJV")'),
+    translation: z.string().optional().describe('Translation abbreviation, e.g. "NIV", "KJV", "NASB", or "ESV" (needs set_esv_api_key) (default "KJV")'),
     name: z.string().optional().describe('Show name (default "Scripture · <first reference>")'),
     theme: z.string().optional().describe("Theme to style it with"),
     style: z.string().optional().describe('Theme style (default "scripture")'),
@@ -994,14 +1047,22 @@ server.tool(
     before: z.string().optional().describe("Name of the project item it should go in front of (default: the end)"),
   },
   async ({ references, translation, name, theme, style, maxChars, projectId, before }) => {
-    let translationInfo: Awaited<ReturnType<typeof findTranslation>>;
+    const esv = isEsv(translation ?? "");
+    let translationInfo: Awaited<ReturnType<typeof findTranslation>> | undefined;
+    if (!esv) {
+      try {
+        translationInfo = await findTranslation(translation ?? "KJV");
+      } catch (err) {
+        return ok({ error: (err as Error).message });
+      }
+    }
+    const abbr = esv ? "ESV" : translationInfo!.abbr;
+    let passages: Awaited<ReturnType<typeof fetchPassage>>[];
     try {
-      translationInfo = await findTranslation(translation ?? "KJV");
+      passages = await Promise.all(references.map((ref) => (esv ? fetchEsvPassage(ref) : fetchPassage(ref, translationInfo!.id))));
     } catch (err) {
       return ok({ error: (err as Error).message });
     }
-    const abbr = translationInfo.abbr;
-    const passages = await Promise.all(references.map((ref) => fetchPassage(ref, translationInfo.id)));
     const slides: string[] = [];
     for (const passage of passages) {
       for (const verse of passage.verses) {
