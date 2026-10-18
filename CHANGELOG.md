@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0 — 2026-10-18
+
+### Added
+- `create_scripture_show` — fetches passages (KJV, WEB, ASV, BBE, Darby, YLT via bible-api.com), makes one slide per verse with the reference on the last line (long verses split at sentence breaks), applies a theme style, and places the show in a project before a named item. It also removes the copy FreeShow auto-adds to whichever project is open. Copyrighted translations (NIV, ESV, NKJV…) are refused with a pointer to paste the text into `create_show`.
+
 ## 0.7.0 — 2026-10-18
 
 ### Added

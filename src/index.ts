@@ -6,12 +6,13 @@ import fs from "fs";
 import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
+import { TRANSLATIONS, fetchPassage, splitLongText } from "./scripture.js";
 import { deleteShows, readOverlays, withFreeShowClosed, writeOverlays } from "./deleteShows.js";
 import { ThemeSchema, applyStyleToShow, buildLowerThird, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.7.0",
+  version: "0.8.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -965,6 +966,79 @@ server.tool(
       changed.push(info.name ?? id);
     }
     return ok({ style, changed, ...(skipped.length && { skipped }) });
+  }
+);
+
+server.tool(
+  "create_scripture_show",
+  "Fetch Bible passages and build a scripture show: one slide per verse (long verses split), with the reference " +
+    "on the last line of each slide so a theme's scripture style shows it under the text. Public-domain translations " +
+    `only (${Object.keys(TRANSLATIONS).join(", ")}); for NIV/ESV/NKJV etc. paste the text into create_show instead. ` +
+    "Optionally adds it to a project, placed before a given item (e.g. the invitation song).",
+  {
+    references: z.array(z.string()).min(1).describe('Passages in order, e.g. ["Ephesians 6:10-18", "John 3:16"]'),
+    translation: z.string().optional().describe('Translation code (default "kjv")'),
+    name: z.string().optional().describe('Show name (default "Scripture · <first reference>")'),
+    theme: z.string().optional().describe("Theme to style it with"),
+    style: z.string().optional().describe('Theme style (default "scripture")'),
+    maxChars: z.number().optional().describe("Split verses longer than this many characters across slides (default 260)"),
+    projectId: z.string().optional().describe("Project to add the show to"),
+    before: z.string().optional().describe("Name of the project item it should go in front of (default: the end)"),
+  },
+  async ({ references, translation, name, theme, style, maxChars, projectId, before }) => {
+    const code = (translation ?? "kjv").toLowerCase();
+    const abbr = TRANSLATIONS[code];
+    if (!abbr) return ok({ error: `"${translation}" isn't available. Use one of: ${Object.keys(TRANSLATIONS).join(", ")} — or paste copyrighted text into create_show.` });
+
+    const passages = await Promise.all(references.map((ref) => fetchPassage(ref, code)));
+    const slides: string[] = [];
+    for (const passage of passages) {
+      for (const verse of passage.verses) {
+        const parts = splitLongText(verse.text, maxChars ?? 260);
+        parts.forEach((part, i) => {
+          // FreeShow drops ":" from slide group names, so "John 3:16" would show as "John 316"
+          const ref = verse.reference.replace(":", ".");
+          const label = parts.length > 1 ? `${ref} (${i + 1}/${parts.length})` : ref;
+          slides.push(`[${label}]\n${part}\n${verse.reference} ${abbr}`);
+        });
+      }
+    }
+
+    const showName = name ?? `Scripture · ${passages[0].reference}`;
+    const id = await createShowAndGetId({ name: showName, category: "scripture", text: slides.join("\n\n") });
+    if (!id) return ok({ error: "FreeShow didn't confirm the new show" });
+    const themed = theme ? await applyTheme(id, theme, style ?? "scripture") : undefined;
+
+    let placement: string | undefined;
+    if (projectId) {
+      // FreeShow adds new shows to whichever project is open; take it out of every project, then place it
+      const projects = ((await callAction("get_projects")) as { data?: Record<string, { shows?: { id: string }[] }> } | null)?.data ?? {};
+      for (const [pid, project] of Object.entries(projects)) {
+        const ids = (project.shows ?? []).map((s) => s.id);
+        for (let i = ids.length - 1; i >= 0; i--) if (ids[i] === id) await callAction("remove_project_item", { id: pid, index: i + 1 });
+      }
+      const getItems = async () =>
+        (((await callAction("get_project", { id: projectId })) as { data?: { shows?: { id: string }[] } } | null)?.data?.shows ?? []).map((s) => s.id);
+      const items = await getItems();
+      const names = await getShowList();
+      const at = before ? items.findIndex((sid) => names[sid]?.name?.toLowerCase() === before.toLowerCase()) : -1;
+      if (before && at < 0) placement = `"${before}" not found in the project; added at the end`;
+      // add_to_project only appends, so take the later items off and put them back after the new show
+      const tail = at >= 0 ? items.slice(at) : [];
+      for (let i = items.length; i > items.length - tail.length; i--) await callAction("remove_project_item", { id: projectId, index: i });
+      for (const sid of [id, ...tail]) await callAction("add_to_project", { projectId, id: sid });
+      placement ??= at >= 0 ? `before "${before}"` : "at the end";
+    }
+
+    return ok({
+      created: showName,
+      id,
+      translation: abbr,
+      passages: passages.map((p) => `${p.reference} (${p.verses.length} verses)`),
+      slides: slides.length,
+      ...(themed && { themed }),
+      ...(placement && { project: placement }),
+    });
   }
 );
 

@@ -241,7 +241,8 @@ Both machines can also be the same computer.
 
 | Tool | Description |
 |------|-------------|
-| `start_scripture` | Display a scripture reference (e.g. "John 3:16") |
+| `start_scripture` | Put a verse on screen live using FreeShow's own Bibles (e.g. "John 3:16") |
+| `create_scripture_show` | Build a ready-made, themed scripture show from references (public-domain translations) and place it in a service |
 | `scripture_next` | Next verse/passage |
 | `scripture_previous` | Previous verse/passage |
 
