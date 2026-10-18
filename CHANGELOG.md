@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 — 2026-10-18
+
+### Added
+- `apply_theme_to_project` — restyle every song in a project at once, e.g. to switch a whole service between branded and plain lyrics. Only `song` shows change by default. Tested live.
+- `create_lower_thirds` and `list_overlays` — themes can define a `lowerThird` design, and `create_lower_thirds` builds name tags, scripture references and banners as FreeShow overlays. FreeShow's API can't create overlays, so this uses the same save → close → edit → reopen routine as `delete_shows`. **Not yet tested against a live FreeShow** (the overlay builder output was checked offline against FreeShow's overlay format).
+
+### Changed
+- `delete_shows`' close/reopen steps moved into a shared `withFreeShowClosed` helper (behavior unchanged; not yet re-run live since the move).
+
 ## 0.6.0 — 2026-10-16
 
 ### Added

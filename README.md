@@ -264,6 +264,8 @@ Both machines can also be the same computer.
 |------|-------------|
 | `select_overlay_by_name` | Enable an overlay by name |
 | `select_overlay_by_id` | Enable an overlay by ID |
+| `list_overlays` | List overlays and their IDs |
+| `create_lower_thirds` | Create branded lower thirds (name tags, scripture references, banners) from a theme — briefly restarts FreeShow |
 
 ### Create
 
@@ -281,6 +283,7 @@ Both machines can also be the same computer.
 | `get_theme` | Read a theme's full definition |
 | `save_theme` | Create or update a theme |
 | `apply_theme` | Restyle a show (or just some slides) with a theme style |
+| `apply_theme_to_project` | Restyle every song in a service at once (e.g. branded ↔ plain lyrics) |
 | `preview_slide` | Render a slide as an image |
 | `add_qr_code` | Put a QR code on a slide using FreeShow's built-in QR Code element (no image file needed) |
 | `add_image` | Place an image (photo, logo) on a slide — survives text edits and theme changes |
@@ -306,6 +309,8 @@ Each theme has named **styles** — for example `lyrics`, `scripture`, `announce
 - `secondary` — style for a second text box (a subtitle, or a scripture reference)
 - `split` — `"firstLine"` or `"lastLine"` to move a heading or reference into that second box automatically
 - `logo` — an optional image placed on every slide
+
+A theme can also include a `lowerThird` design (bar, accent line, logo, title and subtitle text) used by `create_lower_thirds`.
 
 Start from the bundled example in [`themes/classic-dark`](themes/classic-dark/theme.json), or just ask Claude: *"Make a theme for our church using navy #1B2A41 and gold, with Georgia headings."*
 

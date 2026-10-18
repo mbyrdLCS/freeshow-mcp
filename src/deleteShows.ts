@@ -93,57 +93,89 @@ function removeFromProjects(file: string, ids: Set<string>): number {
   return removed;
 }
 
-export async function deleteShows(ids: string[]) {
+/**
+ * Run fn while FreeShow is closed: FreeShow saves and quits via the API, fn edits its files,
+ * then FreeShow is reopened. Refuses while presenting or when FreeShow is on another computer.
+ */
+export async function withFreeShowClosed<T>(what: string, fn: () => T): Promise<{ result: T; freeShowRestarted: boolean; warning?: string }> {
   const host = process.env.FREESHOW_HOST ?? "localhost";
   if (!["localhost", "127.0.0.1", "::1"].includes(host)) {
-    throw new Error("delete_shows only works when FreeShow runs on this computer (FREESHOW_HOST is " + host + ")");
+    throw new Error(`${what} only works when FreeShow runs on this computer (FREESHOW_HOST is ${host})`);
   }
 
   const output = (await callAction("get_output")) as { data?: { slide?: unknown } } | null;
   if (output?.data?.slide) {
-    throw new Error("FreeShow is presenting a slide right now. Clear the output first — deleting restarts FreeShow.");
+    throw new Error(`FreeShow is presenting a slide right now. Clear the output first — ${what} restarts FreeShow.`);
   }
 
+  await callAction("close").catch(() => {}); // FreeShow saves, then quits; the connection may drop
+  if (!(await waitFor(async () => !(await apiUp()), 30000))) {
+    throw new Error(`FreeShow didn't close (it may be showing a dialog). Nothing was changed.`);
+  }
+  await sleep(2000); // let the final save finish writing
+
+  const result = fn();
+
+  launchFreeShow();
+  const back = await waitFor(apiUp, 60000);
+  return {
+    result,
+    freeShowRestarted: back,
+    ...(!back && { warning: "FreeShow didn't come back within a minute — open it manually (set FREESHOW_APP_PATH if it's installed somewhere unusual)." }),
+  };
+}
+
+export async function deleteShows(ids: string[]) {
   const root = dataDir();
   const showsDir = path.join(root, "Shows");
   const targets = new Set(ids);
 
-  await callAction("close").catch(() => {}); // FreeShow saves, then quits; the connection may drop
-  if (!(await waitFor(async () => !(await apiUp()), 30000))) {
-    throw new Error("FreeShow didn't close (it may be showing a dialog). Nothing was deleted.");
-  }
-  await sleep(2000); // let the final save finish writing
-
-  // Move (not delete) the files so they can be recovered
-  const trash = path.join(root, "MCP Deleted Shows", new Date().toISOString().replace(/[:.]/g, "-"));
-  const moved: string[] = [];
-  if (fs.existsSync(showsDir)) {
-    for (const name of fs.readdirSync(showsDir)) {
-      if (!name.endsWith(".show")) continue;
-      const file = path.join(showsDir, name);
-      const id = showIdOfFile(file);
-      if (!id || !targets.has(id)) continue;
-      fs.mkdirSync(trash, { recursive: true });
-      fs.renameSync(file, path.join(trash, name));
-      moved.push(name);
+  const { result, ...restart } = await withFreeShowClosed("delete_shows", () => {
+    // Move (not delete) the files so they can be recovered
+    const trash = path.join(root, "MCP Deleted Shows", new Date().toISOString().replace(/[:.]/g, "-"));
+    const moved: string[] = [];
+    if (fs.existsSync(showsDir)) {
+      for (const name of fs.readdirSync(showsDir)) {
+        if (!name.endsWith(".show")) continue;
+        const file = path.join(showsDir, name);
+        const id = showIdOfFile(file);
+        if (!id || !targets.has(id)) continue;
+        fs.mkdirSync(trash, { recursive: true });
+        fs.renameSync(file, path.join(trash, name));
+        moved.push(name);
+      }
     }
-  }
-  removeFromIndex(path.join(appDataDir(), "shows.json"), targets);
-  removeFromIndex(path.join(root, "Config", "shows.json"), targets);
-  // FreeShow keeps projects in two files; count the larger cleanup (they normally match)
-  const projectItemsRemoved = Math.max(
-    removeFromProjects(path.join(appDataDir(), "projects.json"), targets),
-    removeFromProjects(path.join(root, "Config", "projects.json"), targets)
-  );
-
-  launchFreeShow();
-  const back = await waitFor(apiUp, 60000);
+    removeFromIndex(path.join(appDataDir(), "shows.json"), targets);
+    removeFromIndex(path.join(root, "Config", "shows.json"), targets);
+    // FreeShow keeps projects in two files; count the larger cleanup (they normally match)
+    const projectItemsRemoved = Math.max(
+      removeFromProjects(path.join(appDataDir(), "projects.json"), targets),
+      removeFromProjects(path.join(root, "Config", "projects.json"), targets)
+    );
+    return { moved, trash, projectItemsRemoved };
+  });
 
   return {
-    deleted: moved.map((f) => f.replace(/\.show$/, "")),
-    ...(projectItemsRemoved && { projectItemsRemoved }),
-    recoverableFrom: moved.length ? trash : undefined,
-    freeShowRestarted: back,
-    ...(!back && { warning: "FreeShow didn't come back within a minute — open it manually (set FREESHOW_APP_PATH if it's installed somewhere unusual)." }),
+    deleted: result.moved.map((f) => f.replace(/\.show$/, "")),
+    ...(result.projectItemsRemoved && { projectItemsRemoved: result.projectItemsRemoved }),
+    recoverableFrom: result.moved.length ? result.trash : undefined,
+    ...restart,
   };
+}
+
+// Overlays live in two files, like shows and projects. Merge new/updated overlays into both.
+export function writeOverlays(overlays: Record<string, unknown>) {
+  for (const file of [path.join(appDataDir(), "overlays.json"), path.join(dataDir(), "Config", "overlays.json")]) {
+    if (!fs.existsSync(file)) continue;
+    const existing = JSON.parse(fs.readFileSync(file, "utf8"));
+    fs.writeFileSync(file, JSON.stringify({ ...existing, ...overlays }), "utf8");
+  }
+}
+
+export function readOverlays(): Record<string, { name?: string; category?: string }> {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(appDataDir(), "overlays.json"), "utf8"));
+  } catch {
+    return {};
+  }
 }

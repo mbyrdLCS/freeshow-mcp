@@ -63,11 +63,27 @@ const Style = z.object({
     .describe("Optional logo placed on every slide"),
 });
 
+const Box = z.object({ top: z.number(), left: z.number(), width: z.number(), height: z.number() });
+
+const LowerThird = z.object({
+  bar: z.object({
+    box: Box.describe("The bar's position/size on a 1920x1080 screen"),
+    color: z.string().describe('Bar color, e.g. "rgba(112,32,16,0.94)"'),
+    accent: z.string().optional().describe("Color of a thin line along the top of the bar"),
+    accentHeight: z.number().optional().describe("Accent line thickness in px (default 4)"),
+  }),
+  logo: z.object({ image: z.string(), box: Box }).optional().describe("Optional logo on the bar"),
+  title: TextStyle.describe("Main line, e.g. a name"),
+  subtitle: TextStyle.optional().describe("Second line, e.g. a role; when there's no subtitle the title is centered in the bar"),
+  duration: z.number().optional().describe("Seconds before it hides itself (0 = stays until cleared)"),
+});
+
 export const ThemeSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   defaultStyle: z.string().optional().describe("Style used when none is given (defaults to the first style)"),
   styles: z.record(Style).describe('Named styles, e.g. "lyrics", "scripture", "title", "announcement"'),
+  lowerThird: LowerThird.optional().describe("Design for lower-third overlays (name tags, scripture references, banners)"),
 });
 
 export type Theme = z.infer<typeof ThemeSchema>;
@@ -314,4 +330,44 @@ export function applyStyleToShow(show: AnyObj, style: ThemeStyle, folder: string
   }
 
   return show;
+}
+
+// ─── LOWER THIRDS ─────────────────────────────────────────────────────────────
+
+function textItem(value: string, t: TextStyleT, box: { top: number; left: number; width: number; height: number }) {
+  return {
+    type: "text",
+    style: boxCss(box) + (t.boxStyle ?? ""),
+    align: t.valign ? `align-items: ${VALIGN[t.valign]};` : "",
+    lines: [{ align: t.align ? `text-align: ${t.align};` : "", text: [{ value, style: textRunCss("", t) }] }],
+  };
+}
+
+/** Build a FreeShow overlay (lower third) from a theme's lowerThird design. */
+export function buildLowerThird(theme: Theme, folder: string, title: string, subtitle?: string, duration?: number) {
+  const lt = theme.lowerThird;
+  if (!lt) throw new Error(`Theme "${theme.name}" has no lowerThird design. Add one with save_theme.`);
+  const bar = lt.bar.box;
+  const items: AnyObj[] = [{ style: boxCss(bar) + `background-color:${lt.bar.color};` }];
+  if (lt.bar.accent) {
+    items.push({ style: boxCss({ ...bar, height: lt.bar.accentHeight ?? 4 }) + `background-color:${lt.bar.accent};` });
+  }
+  if (lt.logo) {
+    items.push({ type: "media", src: resolvePath(folder, lt.logo.image), fit: "contain", style: boxCss(lt.logo.box) });
+  }
+  if (subtitle && lt.subtitle) {
+    items.push(textItem(title, lt.title, lt.title.box ?? bar));
+    items.push(textItem(subtitle, lt.subtitle, lt.subtitle.box ?? bar));
+  } else {
+    // Title only: use the title's horizontal position, centered vertically in the bar
+    const box = lt.title.box ?? bar;
+    items.push(textItem(title, { ...lt.title, valign: "center" }, { ...box, top: bar.top, height: bar.height }));
+  }
+  return {
+    name: subtitle ? `${title} · ${subtitle}` : title,
+    color: lt.bar.accent ?? null,
+    category: "visuals",
+    displayDuration: duration ?? lt.duration ?? 0,
+    items,
+  };
 }

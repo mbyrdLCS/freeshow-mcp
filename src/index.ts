@@ -6,12 +6,12 @@ import fs from "fs";
 import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
-import { deleteShows } from "./deleteShows.js";
-import { ThemeSchema, applyStyleToShow, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
+import { deleteShows, readOverlays, withFreeShowClosed, writeOverlays } from "./deleteShows.js";
+import { ThemeSchema, applyStyleToShow, buildLowerThird, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.6.0",
+  version: "0.7.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -891,6 +891,80 @@ server.tool(
     placeImages(show);
     await callAction("set_show", { id: showId, value: JSON.stringify(show) });
     return ok({ removed: name, slide });
+  }
+);
+
+server.tool(
+  "list_overlays",
+  "List FreeShow's overlays (lower thirds, logos, clocks…) with their IDs, for select_overlay_by_id / clear_overlay",
+  {},
+  async () => ok(Object.entries(readOverlays()).map(([id, o]) => ({ id, name: o.name, category: o.category })))
+);
+
+server.tool(
+  "create_lower_thirds",
+  "Create branded lower-third overlays (name tags, scripture references, banners) from a theme's lowerThird design. " +
+    "FreeShow's API can't create overlays, so this saves and CLOSES FreeShow, adds them, and reopens it (~10–20 s) — " +
+    "batch several in one call, never use during a service, and ask the user first. Same title+subtitle replaces the existing one. " +
+    "Show them with select_overlay_by_id and hide with clear_overlay.",
+  {
+    theme: z.string().describe("Theme with a lowerThird design (see list_themes)"),
+    items: z
+      .array(
+        z.object({
+          title: z.string().describe('Main line, e.g. "Evan Strickland" or "Ephesians 6:10–18"'),
+          subtitle: z.string().optional().describe('Second line, e.g. "Evangelist" (omit for a one-line banner)'),
+          duration: z.number().optional().describe("Seconds before it hides itself (0 = stays until cleared; default from theme)"),
+        })
+      )
+      .min(1),
+    confirm: z.literal(true).describe("Must be true — confirms FreeShow may be restarted"),
+  },
+  async ({ theme: themeName, items }) => {
+    const { theme, folder } = loadTheme(themeName);
+    const overlays: Record<string, ReturnType<typeof buildLowerThird>> = {};
+    for (const item of items) {
+      const overlay = buildLowerThird(theme, folder, item.title, item.subtitle, item.duration);
+      overlays["mcp-lt-" + slugName(overlay.name)] = overlay;
+    }
+    const restart = await withFreeShowClosed("create_lower_thirds", () => writeOverlays(overlays));
+    return ok({
+      created: Object.entries(overlays).map(([id, o]) => ({ id, name: o.name })),
+      freeShowRestarted: restart.freeShowRestarted,
+      ...(restart.warning && { warning: restart.warning }),
+    });
+  }
+);
+
+server.tool(
+  "apply_theme_to_project",
+  "Restyle every show in a project at once — e.g. switch all of a service's songs between a branded and a plain lyrics style. " +
+    "By default only shows in the \"song\" category are changed, so announcements and other slides keep their look.",
+  {
+    projectId: z.string().describe("Project ID (see get_projects)"),
+    theme: z.string().describe("Theme id or name"),
+    style: z.string().describe('Style to apply, e.g. "lyrics" or "lyrics-plain"'),
+    category: z.string().optional().describe('Only restyle shows in this category (default "song"; "*" for every show)'),
+  },
+  async ({ projectId, theme, style, category }) => {
+    const project = (await callAction("get_project", { id: projectId })) as { data?: { shows?: { id: string }[] } } | null;
+    const items = project?.data?.shows;
+    if (!items) return ok({ error: `Project ${projectId} not found` });
+    const shows = await getShowList();
+    const want = (category ?? "song").toLowerCase();
+    const changed: string[] = [];
+    const skipped: string[] = [];
+    for (const { id } of items) {
+      const info = shows[id] as { name?: string; category?: string } | undefined;
+      if (!info) continue; // media, sections, etc.
+      if (want !== "*" && (info.category ?? "").toLowerCase() !== want) {
+        skipped.push(info.name ?? id);
+        continue;
+      }
+      await applyTheme(id, theme, style);
+      changed.push(info.name ?? id);
+    }
+    return ok({ style, changed, ...(skipped.length && { skipped }) });
   }
 );
 
