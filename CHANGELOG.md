@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1 — 2026-10-18
+
+### Fixed
+- Templates from `create_template_from_theme` now actually shrink long text to fit. FreeShow only carries `textFit` onto scripture slides when the template item is also marked `auto`, so a called-out range like Mark 1:1-10 overflowed. Tested live with 10 verses.
+
 ## 0.10.0 — 2026-10-18
 
 ### Added
