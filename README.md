@@ -311,7 +311,8 @@ Each theme has named **styles** — for example `lyrics`, `scripture`, `announce
 - `background` — a solid `color` and/or an `image` (embedded in the slide so it shows in previews; set `"layer": true` to use FreeShow's background layer instead)
 - `text` — font, size, color, weight, alignment, shadow and the text box position (on a 1920×1080 slide)
 - `secondary` — style for a second text box (a subtitle, or a scripture reference)
-- `split` — `"firstLine"` or `"lastLine"` to move a heading or reference into that second box automatically
+- `tertiary` — style for a third text box, e.g. a website shown as a banner
+- `split` — `"firstLine"` or `"lastLine"` to move a heading or reference into its own box automatically; `"firstAndLast"` makes three boxes (heading, body, call-to-action line)
 - `logo` — an optional image placed on every slide
 
 A theme can also include a `lowerThird` design (bar, accent line, logo, title and subtitle text) used by `create_lower_thirds`.

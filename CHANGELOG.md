@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.0 — 2026-10-18
+
+### Added
+- Theme styles can have a `tertiary` text box, and `split: "firstAndLast"` turns one text box into heading / body / last line — e.g. an announcement with the website as a bold banner. It survives text edits and theme switches like the other splits.
+
 ## 0.10.1 — 2026-10-18
 
 ### Fixed

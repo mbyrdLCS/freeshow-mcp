@@ -46,12 +46,14 @@ const Style = z.object({
     .optional(),
   text: TextStyle.optional().describe("Style for the main text box (first text item on each slide)"),
   secondary: TextStyle.optional().describe("Style for any additional text boxes (e.g. a subtitle under a heading)"),
+  tertiary: TextStyle.optional().describe("Style for a third text box (e.g. a website line at the bottom); falls back to secondary"),
   split: z
-    .enum(["firstLine", "lastLine"])
+    .enum(["firstLine", "lastLine", "firstAndLast"])
     .optional()
     .describe(
       "When a slide has a single text box with several lines, move the first line (e.g. a heading) or " +
-        "last line (e.g. a scripture reference) into its own box so it gets the secondary style"
+        "last line (e.g. a scripture reference) into its own box so it gets the secondary style. " +
+        '"firstAndLast": heading (text), middle lines (secondary), last line (tertiary) — e.g. a website'
     ),
   logo: z
     .object({
@@ -226,18 +228,22 @@ function isTextItem(item: AnyObj) {
 
 // Turn one multi-line text box into two. For "firstLine" the heading stays first (main style);
 // for "lastLine" the body stays first and the last line becomes the secondary box.
-function splitTextItem(slide: AnyObj, mode: "firstLine" | "lastLine") {
+function splitTextItem(slide: AnyObj, mode: "firstLine" | "lastLine" | "firstAndLast") {
   const textItems = slide.items.filter(isTextItem);
-  // Already split, but FreeShow dropped our marker when it rewrote the text: re-tag the second box
-  if (textItems.length === 2 && !textItems.some((it: AnyObj) => it.id === SPLIT_ID)) textItems[1].id = SPLIT_ID;
+  // Already split, but FreeShow dropped our marker when it rewrote the text: re-tag the extra boxes
+  if (textItems.length > 1 && !textItems.some((it: AnyObj) => it.id === SPLIT_ID)) {
+    for (const it of textItems.slice(1)) it.id = SPLIT_ID;
+  }
   if (textItems.length !== 1) return;
   const item = textItems[0];
   const lines = item.lines.filter((l: AnyObj) => (l.text ?? []).some((t: AnyObj) => String(t.value ?? "").trim()));
   if (lines.length < 2) return;
-  const at = mode === "firstLine" ? 1 : lines.length - 1;
-  item.lines = lines.slice(0, at);
-  const rest = { ...structuredClone(item), id: SPLIT_ID, lines: lines.slice(at) };
-  slide.items.splice(slide.items.indexOf(item) + 1, 0, rest);
+  // Cut points: each piece after the first becomes its own box
+  const cuts = mode === "firstLine" ? [1] : mode === "lastLine" ? [lines.length - 1] : lines.length >= 3 ? [1, lines.length - 1] : [1];
+  const pieces = cuts.map((cut, i) => lines.slice(cut, cuts[i + 1] ?? lines.length));
+  item.lines = lines.slice(0, cuts[0]);
+  const at = slide.items.indexOf(item) + 1;
+  slide.items.splice(at, 0, ...pieces.map((piece) => ({ ...structuredClone(item), id: SPLIT_ID, lines: piece })));
 }
 
 // Undo splitTextItem so a different style starts from the original single text box.
@@ -287,7 +293,7 @@ export function applyStyleToShow(show: AnyObj, style: ThemeStyle, folder: string
     let textIndex = 0;
     for (const item of slide.items) {
       if (!isTextItem(item)) continue;
-      const t = textIndex === 0 ? style.text : style.secondary ?? style.text;
+      const t = textIndex === 0 ? style.text : textIndex === 1 ? style.secondary ?? style.text : style.tertiary ?? style.secondary ?? style.text;
       if (t) styleTextItem(item, t);
       textIndex++;
     }
