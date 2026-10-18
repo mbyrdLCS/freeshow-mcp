@@ -280,3 +280,68 @@ export async function fetchEsvPassage(reference: string): Promise<{ reference: s
   }
   return { reference: labels.join("; "), abbr: "ESV", verses };
 }
+
+/**
+ * Group consecutive verses onto slides while they fit (≈ maxChars at full size), balanced so a
+ * passage splits evenly instead of leaving one short verse alone. References become ranges
+ * ("Luke 16:23–24"). Verses too long for one slide are split on their own.
+ */
+export function packVerses(verses: Verse[], maxChars: number): { reference: string; text: string }[] {
+  const slides: { reference: string; text: string }[] = [];
+  const emit = (group: Verse[]) => {
+    const first = group[0].reference;
+    const last = group[group.length - 1].reference;
+    const lastVerse = last.slice(last.lastIndexOf(":") + 1);
+    const sameChapter = first.slice(0, first.lastIndexOf(":")) === last.slice(0, last.lastIndexOf(":"));
+    const reference = group.length === 1 ? first : sameChapter ? `${first}–${lastVerse}` : `${first}–${last.slice(last.lastIndexOf(" ") + 1)}`;
+    slides.push({ reference, text: group.map((v) => v.text).join(" ") });
+  };
+
+  // Split a run of verses (each shorter than maxChars) into the fewest slides, then balance them
+  const packRun = (run: Verse[]) => {
+    if (!run.length) return;
+    const len = (i: number, j: number) => run.slice(i, j).reduce((n, v) => n + v.text.length + 1, -1);
+    let count = 0;
+    for (let i = 0; i < run.length; count++) {
+      let j = i + 1;
+      while (j < run.length && len(i, j + 1) <= maxChars) j++;
+      i = j;
+    }
+    // best[i][k] = smallest possible "longest slide" for verses i.. split into k slides
+    const memo = new Map<string, { worst: number; cut: number }>();
+    const best = (i: number, k: number): { worst: number; cut: number } => {
+      const key = `${i},${k}`;
+      if (memo.has(key)) return memo.get(key)!;
+      let result = { worst: Infinity, cut: run.length };
+      if (k === 1) result = { worst: len(i, run.length) <= maxChars ? len(i, run.length) : Infinity, cut: run.length };
+      else
+        for (let j = i + 1; j <= run.length - (k - 1); j++) {
+          const here = len(i, j);
+          if (here > maxChars) break;
+          const worst = Math.max(here, best(j, k - 1).worst);
+          if (worst < result.worst) result = { worst, cut: j };
+        }
+      memo.set(key, result);
+      return result;
+    };
+    for (let i = 0, k = count; i < run.length; k--) {
+      const { cut } = best(i, k);
+      emit(run.slice(i, cut));
+      i = cut;
+    }
+  };
+
+  let run: Verse[] = [];
+  for (const verse of verses) {
+    if (verse.text.length > maxChars) {
+      packRun(run);
+      run = [];
+      const parts = splitLongText(verse.text, maxChars);
+      parts.forEach((part, i) => slides.push({ reference: `${verse.reference}${parts.length > 1 ? ` (${i + 1}/${parts.length})` : ""}`, text: part }));
+      continue;
+    }
+    run.push(verse);
+  }
+  packRun(run);
+  return slides;
+}

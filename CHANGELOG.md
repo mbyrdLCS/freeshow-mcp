@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0 — 2026-10-18
+
+### Changed
+- `create_scripture_show` combines consecutive verses onto a slide when they fit (about 300 characters), balanced so a passage splits evenly instead of leaving a lone short verse, with range references like "Luke 16:27–29". Use `oneVersePerSlide` for the old behavior.
+
+### Added
+- Theme text styles accept `fit: true` to shrink text that would overflow its box.
+
 ## 0.12.0 — 2026-10-18
 
 ### Added

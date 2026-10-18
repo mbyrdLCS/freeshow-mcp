@@ -6,13 +6,13 @@ import fs from "fs";
 import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
-import { fetchEsvPassage, fetchPassage, findTranslation, isEsv, listTranslations, saveEsvKey, splitLongText } from "./scripture.js";
+import { fetchEsvPassage, fetchPassage, findTranslation, isEsv, listTranslations, packVerses, saveEsvKey } from "./scripture.js";
 import { deleteShows, readOverlays, updateSyncedSettings, withFreeShowClosed, writeOverlays, writeTemplates } from "./deleteShows.js";
 import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.12.0",
+  version: "0.13.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -1042,11 +1042,12 @@ server.tool(
     name: z.string().optional().describe('Show name (default "Scripture · <first reference>")'),
     theme: z.string().optional().describe("Theme to style it with"),
     style: z.string().optional().describe('Theme style (default "scripture")'),
-    maxChars: z.number().optional().describe("Split verses longer than this many characters across slides (default 260)"),
+    maxChars: z.number().optional().describe("About how many characters fit on one slide (default 300)"),
+    oneVersePerSlide: z.boolean().optional().describe("Put every verse on its own slide (default: combine consecutive verses that fit)"),
     projectId: z.string().optional().describe("Project to add the show to"),
     before: z.string().optional().describe("Name of the project item it should go in front of (default: the end)"),
   },
-  async ({ references, translation, name, theme, style, maxChars, projectId, before }) => {
+  async ({ references, translation, name, theme, style, maxChars, oneVersePerSlide, projectId, before }) => {
     const esv = isEsv(translation ?? "");
     let translationInfo: Awaited<ReturnType<typeof findTranslation>> | undefined;
     if (!esv) {
@@ -1064,15 +1065,14 @@ server.tool(
       return ok({ error: (err as Error).message });
     }
     const slides: string[] = [];
+    const limit = maxChars ?? 300;
     for (const passage of passages) {
-      for (const verse of passage.verses) {
-        const parts = splitLongText(verse.text, maxChars ?? 260);
-        parts.forEach((part, i) => {
-          // FreeShow drops ":" from slide group names, so "John 3:16" would show as "John 316"
-          const ref = verse.reference.replace(":", ".");
-          const label = parts.length > 1 ? `${ref} (${i + 1}/${parts.length})` : ref;
-          slides.push(`[${label}]\n${part}\n${verse.reference} ${abbr}`);
-        });
+      const groups = oneVersePerSlide
+        ? passage.verses.flatMap((v) => packVerses([v], limit))
+        : packVerses(passage.verses, limit);
+      for (const g of groups) {
+        // FreeShow drops ":" from slide group names, so "John 3:16" would show as "John 316"
+        slides.push(`[${g.reference.replace(":", ".")}]\n${g.text}\n${g.reference} ${abbr}`);
       }
     }
 

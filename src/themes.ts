@@ -27,6 +27,7 @@ const TextStyle = z.object({
     .optional()
     .describe("Text box position/size in px on a 1920x1080 slide"),
   boxStyle: z.string().optional().describe('Extra CSS for the text box, e.g. "background-color: rgb(0 0 0 / 0.4);border-radius: 20px;padding: 25px;"'),
+  fit: z.boolean().optional().describe("Shrink the text when it doesn't fit the box (instead of running off the slide)"),
 });
 
 const Style = z.object({
@@ -213,6 +214,8 @@ type AnyObj = Record<string, any>;
 const VALIGN = { top: "flex-start", center: "center", bottom: "flex-end" } as const;
 
 function styleTextItem(item: AnyObj, t: TextStyleT) {
+  if (t.fit) Object.assign(item, { auto: true, textFit: "shrinkToFit" });
+  else if (item.textFit === "shrinkToFit") (delete item.auto, delete item.textFit);
   item.align = t.valign ? `align-items: ${VALIGN[t.valign]};` : "";
   if (t.box) item.style = boxCss(t.box) + (t.boxStyle ?? "");
   else if (t.boxStyle) item.style = toCss(new Map([...parseCss(item.style), ...parseCss(t.boxStyle)]));
