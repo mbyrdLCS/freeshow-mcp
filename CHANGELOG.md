@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 — 2026-10-18
+
+### Changed
+- `create_scripture_show` now uses ChurchApps' Bible service, the same source as FreeShow's online Bibles (API.Bible + YouVersion), so licensed translations like **NIV**, NIrV, NASB and AMP work alongside KJV, BSB, WEB and others. References can be written naturally ("Psalm 23", "Rom 8:28, 31", "John 3:16-18; Eph 2:8-9", "Gen 1:31-2:2"). Text is cleaned of paragraph marks and split small caps ("L ord" → "LORD").
+
+### Added
+- `list_bible_translations` — the available translations, filtered by language (default English).
+
 ## 0.8.0 — 2026-10-18
 
 ### Added

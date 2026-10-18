@@ -6,13 +6,13 @@ import fs from "fs";
 import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
-import { TRANSLATIONS, fetchPassage, splitLongText } from "./scripture.js";
+import { fetchPassage, findTranslation, listTranslations, splitLongText } from "./scripture.js";
 import { deleteShows, readOverlays, withFreeShowClosed, writeOverlays } from "./deleteShows.js";
 import { ThemeSchema, applyStyleToShow, buildLowerThird, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.8.0",
+  version: "0.9.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -970,14 +970,22 @@ server.tool(
 );
 
 server.tool(
+  "list_bible_translations",
+  "List Bible translations available to create_scripture_show — the same online Bibles FreeShow offers " +
+    "(ChurchApps' Bible service: API.Bible and YouVersion, including NIV, NASB, AMP, KJV, BSB…)",
+  { language: z.string().optional().describe('ISO 639-3 language code (default "eng"; "*" for all)') },
+  async ({ language }) => ok(await listTranslations(language ?? "eng"))
+);
+
+server.tool(
   "create_scripture_show",
   "Fetch Bible passages and build a scripture show: one slide per verse (long verses split), with the reference " +
-    "on the last line of each slide so a theme's scripture style shows it under the text. Public-domain translations " +
-    `only (${Object.keys(TRANSLATIONS).join(", ")}); for NIV/ESV/NKJV etc. paste the text into create_show instead. ` +
-    "Optionally adds it to a project, placed before a given item (e.g. the invitation song).",
+    "on the last line of each slide so a theme's scripture style shows it under the text. Uses the same online Bibles " +
+    "as FreeShow (NIV, NASB, AMP, KJV, BSB, WEB… — see list_bible_translations). References can be written naturally: " +
+    '"Psalm 23", "John 3:16-18", "Rom 8:28, 31", "Eph 2:8-9; 6:10". Optionally adds it to a project, placed before a given item.',
   {
     references: z.array(z.string()).min(1).describe('Passages in order, e.g. ["Ephesians 6:10-18", "John 3:16"]'),
-    translation: z.string().optional().describe('Translation code (default "kjv")'),
+    translation: z.string().optional().describe('Translation abbreviation, e.g. "NIV", "KJV", "NASB" (default "KJV")'),
     name: z.string().optional().describe('Show name (default "Scripture · <first reference>")'),
     theme: z.string().optional().describe("Theme to style it with"),
     style: z.string().optional().describe('Theme style (default "scripture")'),
@@ -986,11 +994,14 @@ server.tool(
     before: z.string().optional().describe("Name of the project item it should go in front of (default: the end)"),
   },
   async ({ references, translation, name, theme, style, maxChars, projectId, before }) => {
-    const code = (translation ?? "kjv").toLowerCase();
-    const abbr = TRANSLATIONS[code];
-    if (!abbr) return ok({ error: `"${translation}" isn't available. Use one of: ${Object.keys(TRANSLATIONS).join(", ")} — or paste copyrighted text into create_show.` });
-
-    const passages = await Promise.all(references.map((ref) => fetchPassage(ref, code)));
+    let translationInfo: Awaited<ReturnType<typeof findTranslation>>;
+    try {
+      translationInfo = await findTranslation(translation ?? "KJV");
+    } catch (err) {
+      return ok({ error: (err as Error).message });
+    }
+    const abbr = translationInfo.abbr;
+    const passages = await Promise.all(references.map((ref) => fetchPassage(ref, translationInfo.id)));
     const slides: string[] = [];
     for (const passage of passages) {
       for (const verse of passage.verses) {
