@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { execSync, spawn } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -41,6 +41,17 @@ async function waitFor(check: () => Promise<boolean>, timeoutMs: number): Promis
     if (await check()) return true;
   }
   return false;
+}
+
+// Is the FreeShow app process still alive? (Its API stops answering before it finishes saving and exits.)
+function freeShowRunning(): boolean {
+  try {
+    if (process.platform === "win32") return execSync('tasklist /FI "IMAGENAME eq FreeShow.exe" /NH', { encoding: "utf8" }).includes("FreeShow.exe");
+    execSync(process.platform === "darwin" ? "pgrep -x FreeShow" : "pgrep -x freeshow", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function launchFreeShow() {
@@ -112,7 +123,12 @@ export async function withFreeShowClosed<T>(what: string, fn: () => T): Promise<
   if (!(await waitFor(async () => !(await apiUp()), 30000))) {
     throw new Error(`FreeShow didn't close (it may be showing a dialog). Nothing was changed.`);
   }
-  await sleep(2000); // let the final save finish writing
+  // Wait for the process itself to exit: it keeps saving after the API goes down, and anything
+  // written before then would be overwritten by FreeShow's in-memory copy
+  if (!(await waitFor(async () => !freeShowRunning(), 30000))) {
+    throw new Error(`FreeShow is still shutting down. Nothing was changed — try again in a moment.`);
+  }
+  await sleep(1000);
 
   const result = fn();
 
@@ -177,5 +193,25 @@ export function readOverlays(): Record<string, { name?: string; category?: strin
     return JSON.parse(fs.readFileSync(path.join(appDataDir(), "overlays.json"), "utf8"));
   } catch {
     return {};
+  }
+}
+
+// Templates, like overlays, live in two files
+export function writeTemplates(templates: Record<string, unknown>, removeIds: string[] = []) {
+  for (const file of [path.join(appDataDir(), "templates.json"), path.join(dataDir(), "Config", "templates.json")]) {
+    if (!fs.existsSync(file)) continue;
+    const existing = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const id of removeIds) delete existing[id];
+    fs.writeFileSync(file, JSON.stringify({ ...existing, ...templates }), "utf8");
+  }
+}
+
+// Merge keys into FreeShow's synced settings (e.g. scriptureSettings), in both copies
+export function updateSyncedSettings(update: (settings: Record<string, any>) => void) {
+  for (const file of [path.join(appDataDir(), "settings_synced.json"), path.join(dataDir(), "Config", "settings_synced.json")]) {
+    if (!fs.existsSync(file)) continue;
+    const settings = JSON.parse(fs.readFileSync(file, "utf8"));
+    update(settings);
+    fs.writeFileSync(file, JSON.stringify(settings), "utf8");
   }
 }

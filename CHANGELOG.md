@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.10.0 — 2026-10-18
+
+### Added
+- `create_template_from_theme` — converts a theme style into a FreeShow template (with shrink-to-fit text and the style's background). With `useForScripture`, FreeShow's scripture output — Scripture panel, `start_scripture`, Auto Scripture — uses it. Tested live.
+- `toggle_auto_scripture` — starts/stops FreeShow's Smart listening (wraps `smart_toggle_stt`). Not yet tested with a live microphone.
+
+### Fixed
+- Restarting FreeShow (`delete_shows`, `create_lower_thirds`, templates) now waits for the FreeShow process to actually exit before editing its files. Previously edits could be lost because FreeShow keeps saving for a moment after its API stops.
+- Scripture template IDs avoid the word "scripture": FreeShow treats such IDs as built-in defaults and swaps them back to its own template whenever the Scripture tab is open.
+
 ## 0.9.0 — 2026-10-18
 
 ### Changed

@@ -371,3 +371,26 @@ export function buildLowerThird(theme: Theme, folder: string, title: string, sub
     items,
   };
 }
+
+// ─── FREESHOW TEMPLATES ───────────────────────────────────────────────────────
+
+/**
+ * Turn a theme style into a FreeShow template. The first text box receives the slide/verse text,
+ * the second (from "secondary") the extra line — for scripture, FreeShow puts the reference there.
+ */
+export function buildTemplate(theme: Theme, folder: string, styleName: string, name: string, category: string) {
+  const { style } = resolveStyle(theme, styleName);
+  const items: AnyObj[] = [];
+  const main = style.text ?? {};
+  items.push({
+    ...textItem("1", main, main.box ?? { top: 120, left: 50, width: 1820, height: 840 }),
+    textFit: "shrinkToFit", // long passages shrink instead of running off the slide
+  });
+  if (style.secondary) {
+    items.push(textItem("Meta", style.secondary, style.secondary.box ?? { top: 900, left: 30, width: 1860, height: 150 }));
+  }
+  const settings: AnyObj = {};
+  if (style.background?.image) settings.backgroundPath = resolvePath(folder, style.background.image);
+  if (style.background?.color) settings.backgroundColor = style.background.color;
+  return { name, color: theme.lowerThird?.bar.accent ?? null, category, settings, items };
+}

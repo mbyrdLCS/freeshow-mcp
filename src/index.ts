@@ -7,12 +7,12 @@ import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
 import { fetchPassage, findTranslation, listTranslations, splitLongText } from "./scripture.js";
-import { deleteShows, readOverlays, withFreeShowClosed, writeOverlays } from "./deleteShows.js";
-import { ThemeSchema, applyStyleToShow, buildLowerThird, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
+import { deleteShows, readOverlays, updateSyncedSettings, withFreeShowClosed, writeOverlays, writeTemplates } from "./deleteShows.js";
+import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.9.0",
+  version: "0.10.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -1051,6 +1051,58 @@ server.tool(
       ...(placement && { project: placement }),
     });
   }
+);
+
+server.tool(
+  "create_template_from_theme",
+  "Turn a theme style into a real FreeShow template (usable anywhere in FreeShow). With useForScripture, it also becomes " +
+    "the template for all of FreeShow's scripture output — the Scripture panel, start_scripture and Auto Scripture — so verses " +
+    "come up branded, with the reference in the style's secondary box. FreeShow's API can't create templates, so this saves " +
+    "and CLOSES FreeShow and reopens it (~10–20 s): never during a service, and ask the user first.",
+  {
+    theme: z.string().describe("Theme id or name"),
+    style: z.string().describe('Style to convert, e.g. "scripture"'),
+    name: z.string().optional().describe('Template name (default "<Theme> <Style>")'),
+    useForScripture: z.boolean().optional().describe("Also make it FreeShow's scripture template"),
+    showVersion: z.boolean().optional().describe("With useForScripture: show the Bible's name after the reference (default: leave FreeShow's setting)"),
+    confirm: z.literal(true).describe("Must be true — confirms FreeShow may be restarted"),
+  },
+  async ({ theme: themeName, style, name, useForScripture, showVersion }) => {
+    const { theme, folder } = loadTheme(themeName);
+    const label = name ?? `${theme.name} ${style.charAt(0).toUpperCase() + style.slice(1)}`;
+    // FreeShow treats any scripture template whose ID contains "scripture" as a built-in default and
+    // swaps it for its own when the Scripture tab opens — so keep that word out of the ID
+    const id = "mcp_" + slugName(label).replace(/-/g, "_").replace(/scripture/g, "bible");
+    const template = buildTemplate(theme, folder, style, label, useForScripture ? "scripture" : "presentation");
+    const restart = await withFreeShowClosed("create_template_from_theme", () => {
+      // Drop a same-named template saved by an earlier version under an ID FreeShow overrides
+      writeTemplates({ [id]: template }, ["mcp_" + slugName(label).replace(/-/g, "_")].filter((old) => old !== id));
+      if (useForScripture) {
+        updateSyncedSettings((settings) => {
+          settings.scriptureSettings = {
+            ...settings.scriptureSettings,
+            template: id,
+            ...(showVersion !== undefined && { showVersion, customText: showVersion ? "[reference] · [version]" : "[reference]" }),
+          };
+        });
+      }
+    });
+    return ok({
+      template: { id, name: label },
+      ...(useForScripture && { scriptureTemplate: true }),
+      freeShowRestarted: restart.freeShowRestarted,
+      ...(restart.warning && { warning: restart.warning }),
+    });
+  }
+);
+
+server.tool(
+  "toggle_auto_scripture",
+  "Turn FreeShow's Smart listening on or off — it transcribes the microphone and detects spoken scripture references " +
+    "(Auto Scripture). It must be enabled once in FreeShow → Settings → Smart (speech model + microphone), and needs an " +
+    "offline (local) Bible selected in the Scripture tab.",
+  { value: z.boolean().optional().describe("true = start listening, false = stop, omit = toggle") },
+  async ({ value }) => action("smart_toggle_stt", { value })
 );
 
 // ─── THEMES ───────────────────────────────────────────────────────────────────

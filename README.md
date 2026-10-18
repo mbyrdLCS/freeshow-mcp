@@ -244,6 +244,8 @@ Both machines can also be the same computer.
 | `start_scripture` | Put a verse on screen live using FreeShow's own Bibles (e.g. "John 3:16") |
 | `create_scripture_show` | Build a ready-made, themed scripture show from references (NIV, NASB, AMP, KJV, BSB… — the same online Bibles as FreeShow) and place it in a service |
 | `list_bible_translations` | List the available Bible translations |
+| `create_template_from_theme` | Turn a theme style into a real FreeShow template; optionally make it the template for all scripture output (Scripture panel, `start_scripture`, Auto Scripture) |
+| `toggle_auto_scripture` | Start/stop FreeShow's Smart listening (Auto Scripture detects spoken references) |
 | `scripture_next` | Next verse/passage |
 | `scripture_previous` | Previous verse/passage |
 
