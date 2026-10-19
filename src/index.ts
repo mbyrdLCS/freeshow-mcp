@@ -12,7 +12,7 @@ import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThem
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.13.0",
+  version: "0.14.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -1126,15 +1126,19 @@ server.tool(
     name: z.string().optional().describe('Template name (default "<Theme> <Style>")'),
     useForScripture: z.boolean().optional().describe("Also make it FreeShow's scripture template"),
     showVersion: z.boolean().optional().describe("With useForScripture: show the Bible's name after the reference (default: leave FreeShow's setting)"),
+    category: z
+      .string()
+      .optional()
+      .describe('FreeShow template category (default "scripture" with useForScripture, else "presentation"). Use "scripture" to offer it in the Scripture template list without making it the default.'),
     confirm: z.literal(true).describe("Must be true — confirms FreeShow may be restarted"),
   },
-  async ({ theme: themeName, style, name, useForScripture, showVersion }) => {
+  async ({ theme: themeName, style, name, useForScripture, showVersion, category }) => {
     const { theme, folder } = loadTheme(themeName);
     const label = name ?? `${theme.name} ${style.charAt(0).toUpperCase() + style.slice(1)}`;
     // FreeShow treats any scripture template whose ID contains "scripture" as a built-in default and
     // swaps it for its own when the Scripture tab opens — so keep that word out of the ID
     const id = "mcp_" + slugName(label).replace(/-/g, "_").replace(/scripture/g, "bible");
-    const template = buildTemplate(theme, folder, style, label, useForScripture ? "scripture" : "presentation");
+    const template = buildTemplate(theme, folder, style, label, category ?? (useForScripture ? "scripture" : "presentation"));
     const restart = await withFreeShowClosed("create_template_from_theme", () => {
       // Drop a same-named template saved by an earlier version under an ID FreeShow overrides
       writeTemplates({ [id]: template }, ["mcp_" + slugName(label).replace(/-/g, "_")].filter((old) => old !== id));

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.0 — 2026-10-19
+
+### Changed
+- Scripture templates from `create_template_from_theme` use FreeShow's placeholders (`{scripture_text}`, `{scripture_reference}`), so FreeShow's newer scripture system fills them in. Previously FreeShow warned "template with no scripture values" and fell back to its old system.
+
+### Added
+- `create_template_from_theme` takes `category`, e.g. `"scripture"` to offer a template (like a plain black-and-white one) in FreeShow's Scripture template list without making it the default.
+
+### Fixed
+- `set_slide_transition` also sets the slides inside each group, which FreeShow stores under the parent slide.
+
 ## 0.13.0 — 2026-10-18
 
 ### Changed

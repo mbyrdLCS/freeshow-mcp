@@ -391,15 +391,18 @@ export function buildTemplate(theme: Theme, folder: string, styleName: string, n
   const { style } = resolveStyle(theme, styleName);
   const items: AnyObj[] = [];
   const main = style.text ?? {};
+  // Scripture templates use FreeShow's placeholders so its newer scripture system fills them in
+  // (without them FreeShow warns "template with no scripture values" and falls back to the old system)
+  const isScripture = category === "scripture";
   items.push({
-    ...textItem("1", main, main.box ?? { top: 120, left: 50, width: 1820, height: 840 }),
+    ...textItem(isScripture ? "{scripture_text}" : "1", main, main.box ?? { top: 120, left: 50, width: 1820, height: 840 }),
     // Long passages shrink instead of running off the slide. FreeShow only copies textFit onto
     // scripture slides when the template item is also marked auto.
     auto: true,
     textFit: "shrinkToFit",
   });
   if (style.secondary) {
-    items.push(textItem("Meta", style.secondary, style.secondary.box ?? { top: 900, left: 30, width: 1860, height: 150 }));
+    items.push(textItem(isScripture ? "{scripture_reference}" : "Meta", style.secondary, style.secondary.box ?? { top: 900, left: 30, width: 1860, height: 150 }));
   }
   const settings: AnyObj = {};
   if (style.background?.image) settings.backgroundPath = resolvePath(folder, style.background.image);
