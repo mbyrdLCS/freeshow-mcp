@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.0 — 2026-10-20
+
+### Added
+- `export_package` / `import_package` — move a church's setup to another computer: shows (full data), service order, themes and backgrounds, referenced media, chosen offline Bibles and fonts, slide transition and scripture templates. File paths are rewritten for the new computer, and media dropped on a show but never used is left out. Export and path rewriting are tested; a full import on a second computer is not yet tested.
+- `check_setup` — checkup for the problems we ran into: API off, duplicate outputs, video sound routed to a deleted output or not routed at all, scripture template, missing offline Bible, ESV key, theme images and fonts.
+
 ## 0.15.0 — 2026-10-20
 
 ### Added

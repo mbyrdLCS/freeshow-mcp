@@ -247,6 +247,9 @@ Both machines can also be the same computer.
 | `list_bible_translations` | List the available Bible translations |
 | `set_esv_api_key` | Save your church's free ESV API key (api.esv.org) so scripture shows can use the ESV |
 | `create_template_from_theme` | Turn a theme style into a real FreeShow template; optionally make it the template for all scripture output (Scripture panel, `start_scripture`, Auto Scripture) |
+| `export_package` | Bundle a service (shows, order, theme, media, Bibles, fonts, settings) into a folder to move to another computer |
+| `import_package` | Install that package on the other computer, with all file paths fixed |
+| `check_setup` | Check for common problems: API, duplicate outputs, video-sound routing, scripture template, offline Bible, fonts |
 | `toggle_auto_scripture` | Start/stop FreeShow's Smart listening (Auto Scripture detects spoken references) |
 | `scripture_next` | Next verse/passage |
 | `scripture_previous` | Previous verse/passage |

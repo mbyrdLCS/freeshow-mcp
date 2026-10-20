@@ -10,14 +10,14 @@ import { callAction } from "./freeshow.js";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Electron's userData folder for FreeShow (holds config.json and the shows index)
-function appDataDir(): string {
+export function appDataDir(): string {
   const home = os.homedir();
   if (process.platform === "darwin") return path.join(home, "Library", "Application Support", "freeshow");
   if (process.platform === "win32") return path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "freeshow");
   return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "freeshow");
 }
 
-function dataDir(): string {
+export function dataDir(): string {
   try {
     const config = JSON.parse(fs.readFileSync(path.join(appDataDir(), "config.json"), "utf8"));
     if (config.dataPath) return config.dataPath;

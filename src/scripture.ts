@@ -230,6 +230,8 @@ export function saveEsvKey(key: string) {
   return CONFIG_FILE;
 }
 
+export const esvKeySaved = () => !!esvKey();
+
 function esvKey(): string | undefined {
   return process.env.FREESHOW_MCP_ESV_KEY || readConfig().esvApiKey;
 }

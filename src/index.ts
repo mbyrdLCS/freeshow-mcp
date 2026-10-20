@@ -3,16 +3,18 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
-import { ESV_NOTICE, fetchEsvPassage, fetchPassage, findTranslation, isEsv, listTranslations, packVerses, saveEsvKey } from "./scripture.js";
+import { ESV_NOTICE, esvKeySaved, fetchEsvPassage, fetchPassage, findTranslation, isEsv, listTranslations, packVerses, saveEsvKey } from "./scripture.js";
+import { checkSetup, installPackageFiles, writePackage } from "./package.js";
 import { deleteShows, readOverlays, updateSyncedSettings, withFreeShowClosed, writeOverlays, writeTemplates } from "./deleteShows.js";
 import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.15.0",
+  version: "0.16.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -844,6 +846,10 @@ async function rememberSlideExtra(showId: string, slide: number, extra: Remember
   await callAction("set_show", { id: showId, value: JSON.stringify(show) });
 }
 
+// FreeShow treats any scripture template whose ID contains "scripture" as a built-in default and
+// swaps it for its own when the Scripture tab opens — so keep that word out of the ID
+const templateIdFor = (label: string) => "mcp_" + slugName(label).replace(/-/g, "_").replace(/scripture/g, "bible");
+
 const slugName = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
 const boxParams = {
@@ -1143,9 +1149,7 @@ server.tool(
   async ({ theme: themeName, style, name, useForScripture, showVersion, category }) => {
     const { theme, folder } = loadTheme(themeName);
     const label = name ?? `${theme.name} ${style.charAt(0).toUpperCase() + style.slice(1)}`;
-    // FreeShow treats any scripture template whose ID contains "scripture" as a built-in default and
-    // swaps it for its own when the Scripture tab opens — so keep that word out of the ID
-    const id = "mcp_" + slugName(label).replace(/-/g, "_").replace(/scripture/g, "bible");
+    const id = templateIdFor(label);
     const template = buildTemplate(theme, folder, style, label, category ?? (useForScripture ? "scripture" : "presentation"));
     const restart = await withFreeShowClosed("create_template_from_theme", () => {
       // Drop a same-named template saved by an earlier version under an ID FreeShow overrides
@@ -1176,6 +1180,133 @@ server.tool(
     "offline (local) Bible selected in the Scripture tab.",
   { value: z.boolean().optional().describe("true = start listening, false = stop, omit = toggle") },
   async ({ value }) => action("smart_toggle_stt", { value })
+);
+
+server.tool(
+  "export_package",
+  "Bundle a service project for moving to another computer: every show (full data), the service order, the themes they use " +
+    "(with backgrounds), other referenced media, chosen offline Bibles and font files, and settings (slide transition, scripture " +
+    "templates). Writes a plain folder; copy it to the other computer and run import_package there. Only include Bibles and fonts you may share.",
+  {
+    projectId: z.string().describe("Project (service) to package"),
+    folder: z.string().optional().describe("Where to write the package (default ~/Desktop/<project name> package)"),
+    bibles: z.array(z.string()).optional().describe('Offline Bible names to include, e.g. ["Berean Standard Bible"] — public-domain/licensed only'),
+    fonts: z.array(z.string()).optional().describe("Font files to include (absolute paths)"),
+    textTransition: z.string().optional().describe('Global slide transition to set on the other computer, e.g. "none"'),
+    scriptureTemplates: z
+      .array(z.object({ theme: z.string(), style: z.string(), name: z.string(), default: z.boolean().optional() }))
+      .optional()
+      .describe("Scripture templates to rebuild there; mark one default"),
+  },
+  async ({ projectId, folder, bibles, fonts, textTransition, scriptureTemplates }) => {
+    const project = ((await callAction("get_project", { id: projectId })) as { data?: { name: string; shows: { id: string }[] } } | null)?.data;
+    if (!project) return ok({ error: `Project ${projectId} not found` });
+    const list = await getShowList();
+    const ids = project.shows.map((s) => s.id).filter((id) => list[id]);
+    const shows: Record<string, any> = {};
+    for (const id of ids) shows[id] = await getShowData(id);
+    const out = folder ?? path.join(os.homedir(), "Desktop", `${project.name.replace(/[\/:*?"<>|]/g, "-")} package`);
+    const { manifest, missing } = writePackage(out, shows, { name: project.name, shows: ids }, {
+      bibles,
+      fonts,
+      settings: { textTransition, scriptureTemplates },
+    });
+    return ok({
+      folder: out,
+      shows: Object.values(manifest.shows).map((s) => s.name),
+      themes: manifest.themes.map((t) => t.name),
+      media: Object.keys(manifest.media).length,
+      bibles: manifest.bibles,
+      fonts: manifest.fonts,
+      ...(missing.length && { missingFiles: missing }),
+    });
+  }
+);
+
+server.tool(
+  "import_package",
+  "Install a package made by export_package on this computer: copies themes, media, Bibles and fonts into place, recreates every " +
+    "show (with file paths fixed for this computer) and the service order, sets the slide transition, and rebuilds scripture " +
+    "templates. Template setup restarts FreeShow once (~20 s), so ask the user first. Offline Bibles still need adding in FreeShow " +
+    '(Scripture tab → "+ New scripture" → Local).',
+  {
+    folder: z.string().describe("Package folder"),
+    confirm: z.literal(true).describe("Must be true — confirms FreeShow may be restarted"),
+  },
+  async ({ folder }) => {
+    const { manifest, shows, fontsInstalled, fontsSkipped } = installPackageFiles(folder);
+    const idMap: Record<string, string> = {};
+    for (const [oldId, show] of Object.entries(shows)) {
+      const newId = await createShowAndGetId({ name: show.name, category: show.category, text: "." });
+      if (!newId) return ok({ error: `FreeShow didn't confirm the new show "${show.name}"`, created: Object.keys(idMap).length });
+      await callAction("set_show", { id: newId, value: JSON.stringify(show) });
+      idMap[oldId] = newId;
+    }
+    // FreeShow drops new shows into whichever project is open; take them out, then build the service order
+    const newIds = new Set(Object.values(idMap));
+    const projects = ((await callAction("get_projects")) as { data?: Record<string, { name: string; shows?: { id: string }[] }> } | null)?.data ?? {};
+    for (const [pid, p] of Object.entries(projects)) {
+      const items = (p.shows ?? []).map((x) => x.id);
+      for (let i = items.length - 1; i >= 0; i--) if (newIds.has(items[i])) await callAction("remove_project_item", { id: pid, index: i + 1 });
+    }
+    let projectId: string | undefined;
+    if (manifest.project) {
+      const before = new Set(Object.keys(projects));
+      await callAction("create_project", { name: manifest.project.name });
+      for (let i = 0; i < 20 && !projectId; i++) {
+        await sleep(150);
+        const now = ((await callAction("get_projects")) as { data?: Record<string, { name: string }> } | null)?.data ?? {};
+        projectId = Object.keys(now).find((k) => !before.has(k) && now[k].name === manifest.project!.name);
+      }
+      if (projectId) for (const oldId of manifest.project.shows) if (idMap[oldId]) await callAction("add_to_project", { projectId, id: idMap[oldId] });
+    }
+    if (manifest.settings.textTransition) {
+      await callAction("change_transition", { id: "text", type: manifest.settings.textTransition, duration: manifest.settings.textTransition === "none" ? 0 : 500 });
+    }
+    let templates: string[] = [];
+    let restart: { freeShowRestarted?: boolean; warning?: string } = {};
+    const wanted = manifest.settings.scriptureTemplates ?? [];
+    if (wanted.length) {
+      const built: Record<string, unknown> = {};
+      for (const t of wanted) {
+        const { theme, folder: themeFolder } = loadTheme(t.theme);
+        built[templateIdFor(t.name)] = buildTemplate(theme, themeFolder, t.style, t.name, "scripture");
+      }
+      const defaultId = wanted.find((t) => t.default) ? templateIdFor(wanted.find((t) => t.default)!.name) : undefined;
+      const r = await withFreeShowClosed("import_package", () => {
+        writeTemplates(built);
+        if (defaultId) updateSyncedSettings((st) => (st.scriptureSettings = { ...st.scriptureSettings, template: defaultId }));
+      });
+      restart = { freeShowRestarted: r.freeShowRestarted, ...(r.warning && { warning: r.warning }) };
+      templates = wanted.map((t) => t.name);
+    }
+    return ok({
+      shows: Object.keys(idMap).length,
+      ...(projectId && { project: manifest.project!.name }),
+      themes: manifest.themes.map((t) => t.name),
+      templates,
+      bibles: manifest.bibles.length ? `${manifest.bibles.join(", ")} copied — add in FreeShow: Scripture tab → "+ New scripture" → Local` : "none",
+      fontsInstalled,
+      ...(fontsSkipped.length && { fontsToInstallByHand: fontsSkipped }),
+      ...restart,
+    });
+  }
+);
+
+server.tool(
+  "check_setup",
+  "Check this computer's FreeShow setup for common problems: API on, outputs (duplicates), video sound routing (including routes " +
+    "to deleted outputs), slide transition, scripture template, offline Bible for Auto Scripture, ESV key, and theme images/fonts.",
+  {},
+  async () => {
+    let apiUp = true;
+    try {
+      await callAction("get_cleared");
+    } catch {
+      apiUp = false;
+    }
+    return ok(checkSetup(apiUp, esvKeySaved()));
+  }
 );
 
 // ─── THEMES ───────────────────────────────────────────────────────────────────
