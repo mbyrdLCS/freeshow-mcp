@@ -138,17 +138,23 @@ function cleanText(text: string): string {
     .trim();
 }
 
-// First ("a") or second ("b") half of a verse, split at the sentence boundary nearest the middle
+// First ("a") or second ("b") half of a verse: split at the sentence nearest the middle, or at a
+// comma when the verse is one sentence. The cut is marked with "…" (Crossway requires an ellipsis
+// for omitted words).
 function halfVerse(text: string, part: "a" | "b"): string {
-  const sentences = text.match(/[^.!?;:]+[.!?;:]+["'’”)]*\s*|[^.!?;:]+$/g)?.map((x) => x.trim()) ?? [text];
-  if (sentences.length < 2) return text;
+  const pieces = (re: RegExp) => text.match(re)?.map((x) => x.trim()).filter(Boolean) ?? [text];
+  let parts = pieces(/[^.!?;:]+[.!?;:]+["'’”)]*\s*|[^.!?;:]+$/g);
+  if (parts.length < 2) parts = pieces(/[^,]+,\s*|[^,]+$/g);
+  if (parts.length < 2) return text;
   let best = 1;
   let bestDiff = Infinity;
-  for (let i = 1; i < sentences.length; i++) {
-    const diff = Math.abs(sentences.slice(0, i).join(" ").length - text.length / 2);
+  for (let i = 1; i < parts.length; i++) {
+    const diff = Math.abs(parts.slice(0, i).join(" ").length - text.length / 2);
     if (diff < bestDiff) [best, bestDiff] = [i, diff];
   }
-  return (part === "a" ? sentences.slice(0, best) : sentences.slice(best)).join(" ");
+  const first = parts.slice(0, best).join(" ");
+  const second = parts.slice(best).join(" ");
+  return part === "a" ? `${first.replace(/[,;:]$/, "")} …` : `… ${second}`;
 }
 
 export async function fetchPassage(reference: string, translation: string): Promise<{ reference: string; abbr: string; verses: Verse[] }> {
@@ -229,6 +235,11 @@ function esvKey(): string | undefined {
 }
 
 export const isEsv = (translation: string) => norm(translation) === "esv";
+
+// Crossway requires this credit wherever ESV text is shown (api.esv.org/#copyright)
+export const ESV_NOTICE =
+  "Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, " +
+  "a publishing ministry of Good News Publishers. Used by permission. All rights reserved.\nwww.esv.org";
 
 export async function fetchEsvPassage(reference: string): Promise<{ reference: string; abbr: string; verses: Verse[] }> {
   const key = esvKey();

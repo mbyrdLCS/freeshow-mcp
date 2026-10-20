@@ -6,13 +6,13 @@ import fs from "fs";
 import path from "path";
 import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
-import { fetchEsvPassage, fetchPassage, findTranslation, isEsv, listTranslations, packVerses, saveEsvKey } from "./scripture.js";
+import { ESV_NOTICE, fetchEsvPassage, fetchPassage, findTranslation, isEsv, listTranslations, packVerses, saveEsvKey } from "./scripture.js";
 import { deleteShows, readOverlays, updateSyncedSettings, withFreeShowClosed, writeOverlays, writeTemplates } from "./deleteShows.js";
 import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.14.0",
+  version: "0.15.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -1076,10 +1076,18 @@ server.tool(
       }
     }
 
+    // ESV: Crossway's credit line is required wherever the text is shown
+    if (esv) slides.push(`[ESV Copyright]\n${ESV_NOTICE}`);
+
     const showName = name ?? `Scripture · ${passages[0].reference}`;
     const id = await createShowAndGetId({ name: showName, category: "scripture", text: slides.join("\n\n") });
     if (!id) return ok({ error: "FreeShow didn't confirm the new show" });
     const themed = theme ? await applyTheme(id, theme, style ?? "scripture") : undefined;
+    if (theme && esv) {
+      // Give the copyright slide the theme's small-print style when it has one
+      const { theme: t } = loadTheme(theme);
+      if (t.styles.fineprint) await applyTheme(id, theme, "fineprint", [slides.length]);
+    }
 
     let placement: string | undefined;
     if (projectId) {

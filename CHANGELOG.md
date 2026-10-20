@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.0 — 2026-10-20
+
+### Added
+- **ESV** in `create_scripture_show` via Crossway's official API, with `set_esv_api_key` (stored locally, never in the repo). ESV shows automatically end with Crossway's required copyright slide, using the theme's `fineprint` style if it has one. The ESV fetch is tested; the copyright slide inside FreeShow is not yet tested live.
+
+### Changed
+- Half verses ("44a", "16b") split at a comma when the verse is one sentence, and the cut is marked with "…" as Crossway requires for omissions.
+
 ## 0.14.0 — 2026-10-19
 
 ### Changed

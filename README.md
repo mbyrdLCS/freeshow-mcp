@@ -245,6 +245,7 @@ Both machines can also be the same computer.
 | `start_scripture` | Put a verse on screen live using FreeShow's own Bibles (e.g. "John 3:16") |
 | `create_scripture_show` | Build a ready-made, themed scripture show from references (NIV, NASB, AMP, KJV, BSB… — the same online Bibles as FreeShow) and place it in a service |
 | `list_bible_translations` | List the available Bible translations |
+| `set_esv_api_key` | Save your church's free ESV API key (api.esv.org) so scripture shows can use the ESV |
 | `create_template_from_theme` | Turn a theme style into a real FreeShow template; optionally make it the template for all scripture output (Scripture panel, `start_scripture`, Auto Scripture) |
 | `toggle_auto_scripture` | Start/stop FreeShow's Smart listening (Auto Scripture detects spoken references) |
 | `scripture_next` | Next verse/passage |
@@ -361,6 +362,10 @@ Once configured, you can talk to Claude naturally:
 | `FREESHOW_APP_PATH` | *(auto)* | FreeShow app location, if `delete_shows` can't reopen it (unusual install folder) |
 
 ---
+
+## ESV
+
+The ESV isn't in FreeShow's online Bible list. Crossway offers a free ESV API key for churches and non-commercial use — apply at [api.esv.org](https://api.esv.org) (describe your use honestly, including the AI assistant; approval can take a few weeks). Then save it with `set_esv_api_key` and use `translation: "ESV"`. The key is stored only on your computer (`~/.freeshow-mcp/config.json`). ESV shows automatically end with Crossway's required copyright slide, and partial verses are marked with "…".
 
 ## Good to Know
 
