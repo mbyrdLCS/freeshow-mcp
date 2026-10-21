@@ -2,11 +2,17 @@
   "manifest_version": "0.3",
   "name": "freeshow-mcp",
   "display_name": "FreeShow",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Control and build FreeShow church presentations: slides, songs, scripture, themes, services.",
-  "long_description": "Lets Claude operate FreeShow (freeshow.app): present and navigate slides, import songs, build branded scripture slides (NIV, KJV, BSB and more — ESV with a free Crossway key), apply your church's theme, organize the service order, run announcement loops, QR codes, lower thirds, and move a setup to another computer.\n\nRequires FreeShow with **Settings → Connections → API** turned on.",
-  "author": { "name": "Micheal Byrd", "url": "https://github.com/mbyrdLCS" },
-  "repository": { "type": "git", "url": "https://github.com/mbyrdLCS/freeshow-mcp.git" },
+  "long_description": "Lets Claude operate FreeShow (freeshow.app): present and navigate slides, import songs, build branded scripture slides (NIV, KJV, BSB and more \u2014 ESV with a free Crossway key), apply your church's theme, organize the service order, run announcement loops, QR codes, lower thirds, and move a setup to another computer.\n\nRequires FreeShow with **Settings \u2192 Connections \u2192 API** turned on.",
+  "author": {
+    "name": "Micheal Byrd",
+    "url": "https://github.com/mbyrdLCS"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mbyrdLCS/freeshow-mcp.git"
+  },
   "homepage": "https://github.com/mbyrdLCS/freeshow-mcp",
   "support": "https://github.com/mbyrdLCS/freeshow-mcp/issues",
   "icon": "icon.png",
@@ -15,7 +21,9 @@
     "entry_point": "server/dist/index.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server/dist/index.js"],
+      "args": [
+        "${__dirname}/server/dist/index.js"
+      ],
       "env": {
         "FREESHOW_HOST": "${user_config.freeshow_host}",
         "FREESHOW_PORT": "${user_config.freeshow_port}",
@@ -24,11 +32,24 @@
     }
   },
   "tools_generated": true,
-  "keywords": ["freeshow", "church", "presentation", "worship", "scripture", "lyrics"],
+  "keywords": [
+    "freeshow",
+    "church",
+    "presentation",
+    "worship",
+    "scripture",
+    "lyrics"
+  ],
   "license": "MIT",
   "compatibility": {
-    "platforms": ["darwin", "win32", "linux"],
-    "runtimes": { "node": ">=18.0.0" }
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
   },
   "user_config": {
     "freeshow_host": {
@@ -41,7 +62,7 @@
     "freeshow_port": {
       "type": "string",
       "title": "FreeShow API port",
-      "description": "From FreeShow → Settings → Connections → API.",
+      "description": "From FreeShow \u2192 Settings \u2192 Connections \u2192 API.",
       "default": "5506",
       "required": false
     },

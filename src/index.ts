@@ -9,12 +9,12 @@ import { callAction } from "./freeshow.js";
 import { searchSongs, fetchLyrics } from "./lyrics.js";
 import { ESV_NOTICE, esvKeySaved, fetchEsvPassage, fetchPassage, findTranslation, isEsv, listTranslations, packVerses, saveEsvKey } from "./scripture.js";
 import { checkSetup, installPackageFiles, writePackage } from "./package.js";
-import { deleteShows, readOverlays, updateSyncedSettings, withFreeShowClosed, writeOverlays, writeTemplates } from "./deleteShows.js";
+import { deleteShows, readOverlays, registerLocalBibles, updateSyncedSettings, withFreeShowClosed, writeOverlays, writeTemplates } from "./deleteShows.js";
 import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThemes, loadTheme, resolveStyle, saveTheme, userThemesDir } from "./themes.js";
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.17.0",
+  version: "0.18.0",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -1227,8 +1227,7 @@ server.tool(
   "import_package",
   "Install a package made by export_package on this computer: copies themes, media, Bibles and fonts into place, recreates every " +
     "show (with file paths fixed for this computer) and the service order, sets the slide transition, and rebuilds scripture " +
-    "templates. Template setup restarts FreeShow once (~20 s), so ask the user first. Offline Bibles still need adding in FreeShow " +
-    '(Scripture tab → "+ New scripture" → Local).',
+    "templates and registers offline Bibles. This restarts FreeShow once (~20 s), so ask the user first.",
   {
     folder: z.string().describe("Package folder"),
     confirm: z.literal(true).describe("Must be true — confirms FreeShow may be restarted"),
@@ -1264,9 +1263,10 @@ server.tool(
       await callAction("change_transition", { id: "text", type: manifest.settings.textTransition, duration: manifest.settings.textTransition === "none" ? 0 : 500 });
     }
     let templates: string[] = [];
+    let biblesAdded: string[] = [];
     let restart: { freeShowRestarted?: boolean; warning?: string } = {};
     const wanted = manifest.settings.scriptureTemplates ?? [];
-    if (wanted.length) {
+    if (wanted.length || manifest.bibles.length) {
       const built: Record<string, unknown> = {};
       for (const t of wanted) {
         const { theme, folder: themeFolder } = loadTheme(t.theme);
@@ -1274,8 +1274,9 @@ server.tool(
       }
       const defaultId = wanted.find((t) => t.default) ? templateIdFor(wanted.find((t) => t.default)!.name) : undefined;
       const r = await withFreeShowClosed("import_package", () => {
-        writeTemplates(built);
+        if (Object.keys(built).length) writeTemplates(built);
         if (defaultId) updateSyncedSettings((st) => (st.scriptureSettings = { ...st.scriptureSettings, template: defaultId }));
+        biblesAdded = registerLocalBibles(manifest.bibles);
       });
       restart = { freeShowRestarted: r.freeShowRestarted, ...(r.warning && { warning: r.warning }) };
       templates = wanted.map((t) => t.name);
@@ -1285,7 +1286,7 @@ server.tool(
       ...(projectId && { project: manifest.project!.name }),
       themes: manifest.themes.map((t) => t.name),
       templates,
-      bibles: manifest.bibles.length ? `${manifest.bibles.join(", ")} copied — add in FreeShow: Scripture tab → "+ New scripture" → Local` : "none",
+      bibles: biblesAdded.length ? `${biblesAdded.join(", ")} added to FreeShow's Scripture tab` : "none",
       fontsInstalled,
       ...(fontsSkipped.length && { fontsToInstallByHand: fontsSkipped }),
       ...restart,

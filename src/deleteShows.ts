@@ -179,39 +179,66 @@ export async function deleteShows(ids: string[]) {
   };
 }
 
-// Overlays live in two files, like shows and projects. Merge new/updated overlays into both.
-export function writeOverlays(overlays: Record<string, unknown>) {
-  for (const file of [path.join(appDataDir(), "overlays.json"), path.join(dataDir(), "Config", "overlays.json")]) {
-    if (!fs.existsSync(file)) continue;
-    const existing = JSON.parse(fs.readFileSync(file, "utf8"));
-    fs.writeFileSync(file, JSON.stringify({ ...existing, ...overlays }), "utf8");
+// FreeShow keeps its portable stores (overlays, templates, synced settings) in two places: the app-data
+// folder and Documents/FreeShow/Config. Which one it reads depends on its "custom data location"
+// setting, and a fresh install may only have one of them — so update both, creating a missing copy
+// from the one that exists.
+function updateStore(name: string, update: (data: Record<string, any>) => void) {
+  const files = [path.join(appDataDir(), name), path.join(dataDir(), "Config", name)];
+  const existing = files.find((f) => fs.existsSync(f));
+  const seed = existing ? fs.readFileSync(existing, "utf8") : "{}";
+  for (const file of files) {
+    const data = JSON.parse(fs.existsSync(file) ? fs.readFileSync(file, "utf8") : seed);
+    update(data);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(data), "utf8");
   }
+}
+
+function readStore(name: string): Record<string, any> {
+  const read = (f: string) => {
+    try {
+      return JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch {
+      return {};
+    }
+  };
+  return { ...read(path.join(appDataDir(), name)), ...read(path.join(dataDir(), "Config", name)) };
+}
+
+export function writeOverlays(overlays: Record<string, unknown>) {
+  updateStore("overlays.json", (data) => Object.assign(data, overlays));
 }
 
 export function readOverlays(): Record<string, { name?: string; category?: string }> {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(appDataDir(), "overlays.json"), "utf8"));
-  } catch {
-    return {};
-  }
+  return readStore("overlays.json");
 }
 
-// Templates, like overlays, live in two files
 export function writeTemplates(templates: Record<string, unknown>, removeIds: string[] = []) {
-  for (const file of [path.join(appDataDir(), "templates.json"), path.join(dataDir(), "Config", "templates.json")]) {
-    if (!fs.existsSync(file)) continue;
-    const existing = JSON.parse(fs.readFileSync(file, "utf8"));
-    for (const id of removeIds) delete existing[id];
-    fs.writeFileSync(file, JSON.stringify({ ...existing, ...templates }), "utf8");
-  }
+  updateStore("templates.json", (data) => {
+    for (const id of removeIds) delete data[id];
+    Object.assign(data, templates);
+  });
 }
 
-// Merge keys into FreeShow's synced settings (e.g. scriptureSettings), in both copies
+// Merge keys into FreeShow's synced settings (e.g. scriptureSettings)
 export function updateSyncedSettings(update: (settings: Record<string, any>) => void) {
-  for (const file of [path.join(appDataDir(), "settings_synced.json"), path.join(dataDir(), "Config", "settings_synced.json")]) {
-    if (!fs.existsSync(file)) continue;
-    const settings = JSON.parse(fs.readFileSync(file, "utf8"));
-    update(settings);
-    fs.writeFileSync(file, JSON.stringify(settings), "utf8");
+  updateStore("settings_synced.json", update);
+}
+
+/** Register offline Bible files (in Documents/FreeShow/Bibles) so they show up in FreeShow's Scripture tab. */
+export function registerLocalBibles(fileNames: string[]): string[] {
+  const added: { id: string; name: string }[] = [];
+  for (const file of fileNames) {
+    const full = path.join(dataDir(), "Bibles", file);
+    const id = JSON.parse(fs.readFileSync(full, "utf8"))[0] as string; // .fsb files are ["<id>", {...}]
+    added.push({ id, name: file.replace(/\.fsb$/i, "") });
   }
+  if (added.length) {
+    updateSyncedSettings((st) => {
+      st.scriptures ??= {};
+      for (const b of added) st.scriptures[b.id] = { name: b.name, id: b.id };
+    });
+  }
+  return added.map((b) => b.name);
 }

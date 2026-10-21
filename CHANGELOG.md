@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.18.0 — 2026-10-21
+
+### Fixed
+- Templates, overlays and synced settings are written to **both** of FreeShow's copies (app data and Documents/FreeShow/Config), creating a missing copy from the other. On a fresh install with FreeShow's data in Documents, imported scripture templates were previously invisible to FreeShow. Found while setting up a real church computer.
+
+### Changed
+- `import_package` registers the package's offline Bibles in FreeShow's Scripture tab automatically.
+
 ## 0.17.0 — 2026-10-21
 
 ### Added
