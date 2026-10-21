@@ -1,0 +1,56 @@
+{
+  "manifest_version": "0.3",
+  "name": "freeshow-mcp",
+  "display_name": "FreeShow",
+  "version": "0.17.0",
+  "description": "Control and build FreeShow church presentations: slides, songs, scripture, themes, services.",
+  "long_description": "Lets Claude operate FreeShow (freeshow.app): present and navigate slides, import songs, build branded scripture slides (NIV, KJV, BSB and more — ESV with a free Crossway key), apply your church's theme, organize the service order, run announcement loops, QR codes, lower thirds, and move a setup to another computer.\n\nRequires FreeShow with **Settings → Connections → API** turned on.",
+  "author": { "name": "Micheal Byrd", "url": "https://github.com/mbyrdLCS" },
+  "repository": { "type": "git", "url": "https://github.com/mbyrdLCS/freeshow-mcp.git" },
+  "homepage": "https://github.com/mbyrdLCS/freeshow-mcp",
+  "support": "https://github.com/mbyrdLCS/freeshow-mcp/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "server/dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/dist/index.js"],
+      "env": {
+        "FREESHOW_HOST": "${user_config.freeshow_host}",
+        "FREESHOW_PORT": "${user_config.freeshow_port}",
+        "FREESHOW_MCP_ESV_KEY": "${user_config.esv_api_key}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "keywords": ["freeshow", "church", "presentation", "worship", "scripture", "lyrics"],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "node": ">=18.0.0" }
+  },
+  "user_config": {
+    "freeshow_host": {
+      "type": "string",
+      "title": "FreeShow computer",
+      "description": "Where FreeShow runs. Leave as localhost if it's this computer.",
+      "default": "localhost",
+      "required": false
+    },
+    "freeshow_port": {
+      "type": "string",
+      "title": "FreeShow API port",
+      "description": "From FreeShow → Settings → Connections → API.",
+      "default": "5506",
+      "required": false
+    },
+    "esv_api_key": {
+      "type": "string",
+      "title": "ESV API key (optional)",
+      "description": "Free key from api.esv.org, only needed for ESV scripture slides.",
+      "sensitive": true,
+      "required": false
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "freeshow-mcp",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "MCP server for FreeShow presentation software \u2014 control, build and theme church presentations with Claude",
   "type": "module",
   "main": "dist/index.js",
@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "bundle": "sh scripts/build-mcpb.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

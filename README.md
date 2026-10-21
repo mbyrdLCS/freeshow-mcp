@@ -23,6 +23,17 @@ Exposes 90+ tools that let Claude (or any MCP client) control FreeShow presentat
 
 ---
 
+## Easiest install: Claude desktop app (no terminal)
+
+1. Install [FreeShow](https://freeshow.app) and turn on **Settings → Connections → API**.
+2. Install the [Claude desktop app](https://claude.ai/download).
+3. Download **`freeshow-mcp.mcpb`** from the [latest release](https://github.com/mbyrdLCS/freeshow-mcp/releases/latest) and double-click it (or Claude → Settings → Extensions → Install Extension). Node.js comes with the Claude app.
+4. Optional: in the extension's settings, set where FreeShow runs (default: this computer) and your free ESV API key.
+
+Then just ask Claude, e.g. *"Build Sunday's scripture slides: Luke 19:10, Romans 8:28-30"*.
+
+To build the extension yourself: `npm run bundle` → `dist/freeshow-mcp.mcpb`.
+
 ## Quick Start
 
 ### 1. Enable FreeShow API

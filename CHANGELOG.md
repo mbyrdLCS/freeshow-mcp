@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.17.0 — 2026-10-21
+
+### Added
+- **One-click install for the Claude desktop app**: `freeshow-mcp.mcpb` (MCP Bundle) with settings for the FreeShow address/port and an optional ESV key. Build with `npm run bundle`. Tested by starting the bundled server through an MCP client (all tools, themes, Bibles and song search working).
+
 ## 0.16.0 — 2026-10-20
 
 ### Added
