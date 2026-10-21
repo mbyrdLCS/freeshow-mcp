@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.18.1 — 2026-10-21
+
+### Fixed
+- Claude desktop extension: a blank optional setting arrives as the literal text `${user_config.esv_api_key}`, which was used as the ESV key and rejected. Placeholders are now treated as "not set" (falling back to the key saved with `set_esv_api_key`). Same for the FreeShow host/port settings.
+
 ## 0.18.0 — 2026-10-21
 
 ### Fixed

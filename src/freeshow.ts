@@ -1,5 +1,7 @@
-const DEFAULT_HOST = process.env.FREESHOW_HOST ?? "localhost";
-const DEFAULT_PORT = parseInt(process.env.FREESHOW_PORT ?? "5506");
+// Unfilled Claude-app settings arrive as literal "${user_config.…}" placeholders
+const setting = (value: string | undefined) => (value && !value.includes("${") ? value.trim() : undefined);
+const DEFAULT_HOST = setting(process.env.FREESHOW_HOST) || "localhost";
+const DEFAULT_PORT = parseInt(setting(process.env.FREESHOW_PORT) || "5506");
 
 export async function callAction(
   action: string,

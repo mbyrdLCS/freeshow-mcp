@@ -233,7 +233,10 @@ export function saveEsvKey(key: string) {
 export const esvKeySaved = () => !!esvKey();
 
 function esvKey(): string | undefined {
-  return process.env.FREESHOW_MCP_ESV_KEY || readConfig().esvApiKey;
+  // The Claude desktop app passes an unfilled optional setting through as the literal
+  // "${user_config.esv_api_key}", so treat placeholders as "not set"
+  const fromEnv = process.env.FREESHOW_MCP_ESV_KEY?.trim();
+  return (fromEnv && !fromEnv.includes("${") ? fromEnv : undefined) || readConfig().esvApiKey;
 }
 
 export const isEsv = (translation: string) => norm(translation) === "esv";

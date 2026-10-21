@@ -14,7 +14,7 @@ import { ThemeSchema, applyStyleToShow, buildLowerThird, buildTemplate, listThem
 
 const server = new McpServer({
   name: "freeshow-mcp",
-  version: "0.18.0",
+  version: "0.18.1",
 });
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
